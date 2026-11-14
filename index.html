@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Schnäppchenkoch</title>
+<meta name="description" content="Postleitzahl eingeben und sehen, welche Supermärkte im Umkreis liegen – mit Link zu den aktuellen Angeboten.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* Layout: eine ruhige Spalte – Suchleiste oben, darunter je Kette ein „Preisschild“ mit der nächsten Filiale. */
+:root {
+  --bg: #f4f6f1;          /* helles Blattgrün-Grau */
+  --paper: #ffffff;
+  --ink: #18231c;
+  --muted: #5d6b61;
+  --line: #dde4da;
+  --leaf: #1f6b45;        /* Hauptfarbe: Gemüseabteilung */
+  --leaf-soft: #e3efe6;
+  --tag: #ffd84d;         /* Preisschild-Gelb */
+  --tag-ink: #2a2200;
+  --warn: #9a4b00;
+  --warn-soft: #fff1df;
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --radius: 14px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111713; --paper: #18211b; --ink: #e8efe9; --muted: #9fb0a4; --line: #2a372e;
+    --leaf: #6fd09a; --leaf-soft: #1d3326; --tag: #ffd84d; --tag-ink: #2a2200;
+    --warn: #ffb870; --warn-soft: #33240f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111713; --paper: #18211b; --ink: #e8efe9; --muted: #9fb0a4; --line: #2a372e;
+  --leaf: #6fd09a; --leaf-soft: #1d3326; --tag: #ffd84d; --tag-ink: #2a2200;
+  --warn: #ffb870; --warn-soft: #33240f; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 16px/1.55 var(--font-body);
+  padding-block: max(20px, env(safe-area-inset-top, 0px)) max(32px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 760px; margin: 0 auto; display: grid; gap: 22px; }
+header { display: grid; gap: 6px; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand svg { flex: none; }
+h1 {
+  font-family: var(--font-display); font-weight: 800; letter-spacing: -0.02em;
+  font-size: clamp(30px, 6vw, 44px); line-height: 1.05; margin: 0; text-wrap: balance;
+}
+.slogan { margin: 0; color: var(--muted); font-size: 17px; max-width: 60ch; }
+.badge {
+  justify-self: start; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--leaf); background: var(--leaf-soft); border-radius: 999px; padding: 3px 10px;
+}
+form.suche {
+  background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 16px; display: grid; gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto auto; align-items: end;
+}
+.feld { display: grid; gap: 4px; min-width: 0; }
+.feld label { font-size: 13px; font-weight: 600; color: var(--muted); }
+input, select, button { font: inherit; }
+input#plz, select#radius {
+  width: 100%; border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+  border-radius: 10px; padding: 10px 12px; font-size: 18px; font-variant-numeric: tabular-nums;
+}
+input#plz { letter-spacing: .08em; }
+button.los {
+  border: 0; border-radius: 10px; padding: 11px 18px; font-weight: 600; font-size: 16px;
+  background: var(--leaf); color: var(--paper); cursor: pointer;
+}
+button.los:disabled { opacity: .55; cursor: progress; }
+:focus-visible { outline: 3px solid var(--tag); outline-offset: 2px; }
+@media (max-width: 560px) {
+  form.suche { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .feld.plzfeld { grid-column: 1 / -1; }
+}
+.status { min-height: 24px; color: var(--muted); font-size: 15px; }
+.status.fehler { color: var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 10px 12px; }
+.kopf { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; justify-content: space-between; }
+.kopf h2 { font-family: var(--font-display); font-weight: 600; font-size: 22px; margin: 0; }
+.kopf .meta { color: var(--muted); font-size: 14px; }
+.hinweis { background: var(--warn-soft); color: var(--ink); border-radius: 10px; padding: 10px 12px; font-size: 15px; }
+.hinweis button { font: inherit; font-weight: 600; color: var(--warn); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
+ul.ketten { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+li.kette {
+  background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 14px 16px; display: grid; gap: 6px;
+  grid-template-columns: minmax(0, 1fr) auto; align-items: start;
+}
+.k-name { font-family: var(--font-display); font-weight: 600; font-size: 19px; line-height: 1.2; }
+.k-adresse { color: var(--muted); font-size: 15px; min-width: 0; overflow-wrap: anywhere; }
+.preisschild {
+  grid-row: 1 / span 2; grid-column: 2; align-self: center;
+  background: var(--tag); color: var(--tag-ink); font-weight: 700; font-variant-numeric: tabular-nums;
+  padding: 6px 12px 6px 18px; border-radius: 4px 10px 10px 4px; position: relative; white-space: nowrap;
+  clip-path: polygon(10px 0, 100% 0, 100% 100%, 10px 100%, 0 50%);
+}
+.preisschild::before {
+  content: ""; position: absolute; left: 9px; top: 50%; width: 5px; height: 5px; margin-top: -2.5px;
+  border-radius: 50%; background: var(--paper);
+}
+.k-links { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 15px; }
+.k-links a, .k-links span { color: var(--leaf); font-weight: 600; text-underline-offset: 3px; }
+.k-links span { text-decoration: underline; opacity: .55; }
+details.mehr { grid-column: 1 / -1; font-size: 14px; color: var(--muted); }
+details.mehr summary { cursor: pointer; }
+details.mehr ol { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 2px; }
+.fehlt { font-size: 15px; color: var(--muted); }
+.fehlt strong { color: var(--ink); font-weight: 600; }
+.beispiel-label { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+footer { color: var(--muted); font-size: 13px; display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 14px; }
+footer a { color: inherit; }
+@media (prefers-reduced-motion: no-preference) {
+  li.kette { animation: rein .25s ease-out both; }
+  @keyframes rein { from { transform: translateY(4px); opacity: .6; } to { transform: none; opacity: 1; } }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">
+        <rect x="4" y="16" width="32" height="18" rx="5" fill="var(--leaf)"/>
+        <rect x="9" y="8" width="22" height="10" rx="5" fill="var(--leaf)"/>
+        <path d="M26 21h8l-4 4z" fill="var(--tag)"/>
+        <circle cx="14" cy="25" r="2.2" fill="var(--paper)"/>
+      </svg>
+      <h1>Schnäppchenkoch</h1>
+    </div>
+    <p class="slogan">Was essen wir heute – und was ist im Angebot? Gib deine Postleitzahl ein und sieh, welche Supermärkte in deiner Nähe liegen.</p>
+    <span class="badge">Testversion · Etappe 1</span>
+  </header>
+
+  <form class="suche" id="suche" novalidate>
+    <div class="feld plzfeld">
+      <label for="plz">Postleitzahl</label>
+      <input id="plz" name="plz" inputmode="numeric" autocomplete="postal-code" maxlength="5" placeholder="z. B. 10115" required>
+    </div>
+    <div class="feld">
+      <label for="radius">Umkreis</label>
+      <select id="radius" name="radius">
+        <option value="5">5 km</option>
+        <option value="10" selected>10 km</option>
+        <option value="15">15 km</option>
+        <option value="20">20 km</option>
+        <option value="30">30 km</option>
+      </select>
+    </div>
+    <button class="los" id="los" type="submit">Märkte finden</button>
+  </form>
+
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+
+  <section id="ergebnis" aria-label="Ergebnis">
+    <div class="kopf">
+      <span class="beispiel-label">Muster – so sieht ein Ergebnis aus (keine echten Daten)</span>
+    </div>
+    <ul class="ketten">
+      <li class="kette" aria-hidden="true"><span class="k-name">Kette A</span><span class="k-adresse">Musterstraße 1, Musterstadt · 3 Filialen im Umkreis</span><span class="preisschild">2,4 km</span><span class="k-links"><span>Angebote dieser Filiale</span><span>Auf der Karte</span></span></li>
+      <li class="kette" aria-hidden="true"><span class="k-name">Kette B</span><span class="k-adresse">Beispielweg 7, Musterstadt · 1 Filiale im Umkreis</span><span class="preisschild">3,1 km</span><span class="k-links"><span>Angebote von Kette B</span><span>Auf der Karte</span></span></li>
+    </ul>
+    <p class="fehlt">Gib oben deine Postleitzahl ein. Du siehst dann je Supermarkt-Kette die nächste Filiale, wie weit sie entfernt ist und einen Link zu ihren aktuellen Angeboten.</p>
+  </section>
+
+  <footer>
+    <span>Kartendaten: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap-Mitwirkende</a> (ODbL), abgefragt über Nominatim und Overpass. Die Kartendaten können unvollständig sein.</span>
+    <span>Datenschutz: Die eingegebene Postleitzahl wird zur Suche an diese OpenStreetMap-Dienste geschickt. Diese Seite speichert nichts auf einem Server; die letzte Suche merkt sich nur dein Browser.</span>
+    <span>Angebote und Preise stehen auf den Seiten der Supermärkte. Schnäppchenkoch verlinkt nur dorthin.</span>
+  </footer>
+</div>
+
+<script>
+"use strict";
+// Ketten der App (die vier großen Gruppen + Norma). Erkennung über Name/Marke, Wikidata und Webseite.
+// Wikidata-Nummern nur dort, wo sie in echten OSM-Daten geprüft wurden (14.11.2026).
+const KETTEN = [
+  { id: "aldi-nord", name: "Aldi Nord", wd: ["Q41171373"], muster: /aldi\s*nord/i, domain: /aldi-nord\.de/i, angebote: "https://www.aldi-nord.de/angebote.html" },
+  { id: "aldi-sued", name: "Aldi Süd", wd: [], muster: /aldi\s*s(ü|ue|u)d/i, domain: /aldi-sued\.de/i, angebote: "https://www.aldi-sued.de/angebote" },
+  { id: "aldi", name: "Aldi", wd: [], muster: /^aldi\b/i, domain: null, angebote: null },
+  { id: "lidl", name: "Lidl", wd: ["Q151954"], muster: /lidl/i, domain: /lidl\.de/i, angebote: "https://www.lidl.de/c/online-prospekte/s10005610" },
+  { id: "kaufland", name: "Kaufland", wd: [], muster: /kaufland/i, domain: /kaufland\.de/i, angebote: "https://filiale.kaufland.de/angebote/aktuelle-woche.html" },
+  { id: "marktkauf", name: "Marktkauf", wd: [], muster: /marktkauf/i, domain: /marktkauf\.de/i, angebote: "https://www.marktkauf.de/" },
+  { id: "edeka", name: "Edeka", wd: ["Q701755"], muster: /edeka|e[\s-]?center/i, domain: /(^|\.)edeka\.de/i, angebote: "https://www.edeka.de/" },
+  { id: "netto", name: "Netto Marken-Discount", wd: ["Q879858"], muster: /netto/i, domain: /netto-online\.de/i, angebote: "https://www.netto-online.de/filialangebote" },
+  { id: "nahkauf", name: "Nahkauf", wd: [], muster: /nahkauf/i, domain: /nahkauf\.de/i, angebote: "https://www.nahkauf.de/" },
+  { id: "rewe", name: "Rewe", wd: ["Q16968817"], muster: /rewe/i, domain: /rewe\.de/i, angebote: "https://www.rewe.de/angebote/" },
+  { id: "penny", name: "Penny", wd: ["Q284688"], muster: /penny/i, domain: /penny\.de/i, angebote: "https://www.penny.de/angebote" },
+  { id: "norma", name: "Norma", wd: [], muster: /\bnorma\b/i, domain: /norma-online\.de/i, angebote: "https://www.norma-online.de/de/angebote/" },
+];
+const NETTO_DAENISCH = "Q552652"; // „Netto“ mit dem Scottie-Hund (andere Firma) – nicht Teil der App
+const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter"];
+
+const $ = (id) => document.getElementById(id);
+const fmtKm = (km) => km.toLocaleString("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " km";
+
+function speicherLesen(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } }
+function speicherSchreiben(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* egal */ } }
+
+function km(a, b) {
+  const R = 6371, rad = (x) => x * Math.PI / 180;
+  const dLat = rad(b.lat - a.lat), dLon = rad(b.lon - a.lon);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+function kettenVon(tags) {
+  const text = [tags.brand, tags.name, tags["brand:de"]].filter(Boolean).join(" | ");
+  const wd = tags["brand:wikidata"] || "";
+  const web = tags.website || tags["contact:website"] || tags.url || "";
+  if (wd === NETTO_DAENISCH) return null;
+  for (const k of KETTEN) {
+    if (k.wd.includes(wd) || (text && k.muster.test(text)) || (k.domain && web && k.domain.test(web))) {
+      if (k.id === "aldi") { // „Aldi“ ohne Nord/Süd: über die Webseite zuordnen, wenn möglich
+        if (/aldi-sued\.de/i.test(web)) return KETTEN.find((x) => x.id === "aldi-sued");
+        if (/aldi-nord\.de/i.test(web) || wd === "Q41171373") return KETTEN.find((x) => x.id === "aldi-nord");
+      }
+      return k;
+    }
+  }
+  return null;
+}
+
+function adresse(t) {
+  const strasse = [t["addr:street"], t["addr:housenumber"]].filter(Boolean).join(" ");
+  const ort = t["addr:city"] || t["addr:place"] || t["addr:suburb"] || "";
+  return [strasse, ort].filter(Boolean).join(", ") || "Adresse nicht in den Kartendaten";
+}
+
+function angeboteLink(kette, tags) {
+  const web = tags.website || tags["contact:website"] || "";
+  if (kette.domain && web && kette.domain.test(web)) return { url: web, text: "Angebote dieser Filiale" };
+  if (kette.angebote) return { url: kette.angebote, text: "Angebote von " + kette.name };
+  return null;
+}
+
+async function plzKoordinaten(plz) {
+  const cache = speicherLesen("plz2:" + plz);
+  if (cache) return cache;
+  const url = "https://nominatim.openstreetmap.org/search?postalcode=" + plz + "&country=de&format=jsonv2&limit=1";
+  const r = await fetch(url, { headers: { "Accept-Language": "de" } });
+  if (!r.ok) throw new Error("Die Postleitzahlen-Suche antwortet gerade nicht (Fehler " + r.status + "). Bitte in einer Minute erneut versuchen.");
+  const d = await r.json();
+  if (!d.length) throw new Error("Zur Postleitzahl " + plz + " wurde kein Ort gefunden. Bitte die Eingabe prüfen.");
+  const teile = d[0].display_name.split(",").map((s) => s.trim()).filter((s) => !/^\d{5}$/.test(s));
+  const p = { lat: +d[0].lat, lon: +d[0].lon, name: teile[0] || "" };
+  speicherSchreiben("plz2:" + plz, p);
+  return p;
+}
+
+async function maerkte(p, radiusKm) {
+  const ql = `[out:json][timeout:25];nwr["shop"="supermarket"](around:${radiusKm * 1000},${p.lat},${p.lon});out center tags;`;
+  let letzterFehler;
+  for (const ep of OVERPASS) {
+    try {
+      const r = await fetch(ep, { method: "POST", body: new URLSearchParams({ data: ql }) });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return await r.json();
+    } catch (e) { letzterFehler = e; }
+  }
+  throw new Error("Die Märkte-Suche ist gerade überlastet (" + letzterFehler.message + "). Bitte in ein bis zwei Minuten erneut versuchen.");
+}
+
+function auswerten(p, d, radiusKm) {
+  const gruppen = new Map();
+  for (const el of d.elements || []) {
+    const lat = el.lat ?? el.center?.lat, lon = el.lon ?? el.center?.lon;
+    if (lat == null || !el.tags) continue;
+    const k = kettenVon(el.tags);
+    if (!k) continue;
+    const eintrag = { km: km(p, { lat, lon }), lat, lon, tags: el.tags };
+    if (eintrag.km > radiusKm) continue; // Overpass misst bis zum Gebäuderand; wir zählen ab dem Mittelpunkt
+    if (!gruppen.has(k.id)) gruppen.set(k.id, { kette: k, filialen: [] });
+    gruppen.get(k.id).filialen.push(eintrag);
+  }
+  const liste = [...gruppen.values()];
+  liste.forEach((g) => g.filialen.sort((a, b) => a.km - b.km));
+  liste.sort((a, b) => a.filialen[0].km - b.filialen[0].km);
+  return liste;
+}
+
+function el(tag, attrs = {}, ...kinder) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else if (k === "text") e.textContent = v; else e.setAttribute(k, v);
+  }
+  for (const k of kinder) if (k) e.append(k);
+  return e;
+}
+
+function zeigen(plz, p, radiusKm, liste, stand) {
+  const ziel = $("ergebnis");
+  ziel.replaceChildren();
+  const anzahl = liste.reduce((s, g) => s + g.filialen.length, 0);
+  ziel.append(el("div", { class: "kopf" },
+    el("h2", { text: `${liste.length} ${liste.length === 1 ? "Kette" : "Ketten"} im Umkreis von ${radiusKm} km` }),
+    el("span", { class: "meta", text: `${plz} ${p.name} · ${anzahl} Filialen${stand ? " · Kartenstand " + stand : ""}` })));
+
+  const groessere = [...$("radius").options].map((o) => +o.value).find((r) => r > radiusKm);
+  if (liste.length < 3 && groessere) {
+    const b = el("button", { type: "button", text: `Mit ${groessere} km suchen` });
+    b.addEventListener("click", () => { $("radius").value = String(groessere); suchen(); });
+    ziel.append(el("p", { class: "hinweis" }, document.createTextNode(`Hier gibt es nur wenige Ketten in ${radiusKm} km Entfernung. `), b));
+  }
+
+  const ul = el("ul", { class: "ketten" });
+  for (const g of liste) {
+    const naechste = g.filialen[0];
+    const link = angeboteLink(g.kette, naechste.tags);
+    const links = el("div", { class: "k-links" });
+    if (link) links.append(el("a", { href: link.url, target: "_blank", rel: "noopener", text: link.text }));
+    if (g.kette.id === "aldi") {
+      links.append(el("a", { href: "https://www.aldi-nord.de/angebote.html", target: "_blank", rel: "noopener", text: "Angebote Aldi Nord" }));
+      links.append(el("a", { href: "https://www.aldi-sued.de/angebote", target: "_blank", rel: "noopener", text: "Angebote Aldi Süd" }));
+    }
+    links.append(el("a", { href: `https://www.openstreetmap.org/?mlat=${naechste.lat}&mlon=${naechste.lon}#map=17/${naechste.lat}/${naechste.lon}`, target: "_blank", rel: "noopener", text: "Auf der Karte" }));
+    const li = el("li", { class: "kette" },
+      el("span", { class: "k-name", text: g.kette.name }),
+      el("span", { class: "k-adresse", text: `${adresse(naechste.tags)} · ${g.filialen.length} ${g.filialen.length === 1 ? "Filiale" : "Filialen"} im Umkreis` }),
+      el("span", { class: "preisschild", text: fmtKm(naechste.km) }),
+      links);
+    if (g.filialen.length > 1) {
+      const ol = el("ol");
+      g.filialen.slice(1).forEach((f) => ol.append(el("li", { text: `${adresse(f.tags)} – ${fmtKm(f.km)}` })));
+      li.append(el("details", { class: "mehr" }, el("summary", { text: "Weitere Filialen" }), ol));
+    }
+    ul.append(li);
+  }
+  ziel.append(ul);
+
+  const gefunden = new Set(liste.map((g) => g.kette.id));
+  const fehlen = KETTEN.filter((k) => k.id !== "aldi" && !gefunden.has(k.id) &&
+    !(k.id.startsWith("aldi-") && (gefunden.has("aldi-nord") || gefunden.has("aldi-sued") || gefunden.has("aldi"))));
+  if (fehlen.length) {
+    ziel.append(el("p", { class: "fehlt" }, el("strong", { text: "Nicht im Umkreis: " }), document.createTextNode(fehlen.map((k) => k.name).join(", "))));
+  }
+}
+
+async function suchen() {
+  const plz = $("plz").value.trim();
+  const radiusKm = +$("radius").value;
+  const status = $("status");
+  status.className = "status";
+  if (!/^\d{5}$/.test(plz)) {
+    status.className = "status fehler";
+    status.textContent = "Bitte eine fünfstellige Postleitzahl eingeben, z. B. 10115.";
+    $("plz").focus();
+    return;
+  }
+  $("los").disabled = true;
+  try {
+    status.textContent = "Postleitzahl wird gesucht …";
+    const p = await plzKoordinaten(plz);
+    status.textContent = `Märkte im Umkreis von ${radiusKm} km um ${p.name} werden gesucht …`;
+    const d = await maerkte(p, radiusKm);
+    const stand = d.osm3s?.timestamp_osm_base ? new Date(d.osm3s.timestamp_osm_base).toLocaleDateString("de-DE") : "";
+    zeigen(plz, p, radiusKm, auswerten(p, d, radiusKm), stand);
+    status.textContent = "";
+    speicherSchreiben("letzte", { plz, radiusKm });
+  } catch (e) {
+    status.className = "status fehler";
+    status.textContent = e.message || "Etwas ist schiefgegangen. Bitte erneut versuchen.";
+  } finally {
+    $("los").disabled = false;
+  }
+}
+
+$("suche").addEventListener("submit", (e) => { e.preventDefault(); suchen(); });
+$("plz").addEventListener("input", (e) => { e.target.value = e.target.value.replace(/\D/g, "").slice(0, 5); });
+const letzte = speicherLesen("letzte");
+if (letzte) { $("plz").value = letzte.plz; $("radius").value = String(letzte.radiusKm); }
+</script>
+</body>
+</html>
