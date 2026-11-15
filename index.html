@@ -40,6 +40,7 @@
   --warn: #ffb870; --warn-soft: #33240f; color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0; background: var(--bg); color: var(--ink);
@@ -118,6 +119,46 @@ details.mehr ol { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 2px; 
 .fehlt { font-size: 15px; color: var(--muted); }
 .fehlt strong { color: var(--ink); font-weight: 600; }
 .beispiel-label { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.k-zahl { grid-column: 1 / -1; font-size: 14px; color: var(--muted); }
+.k-zahl button { font: inherit; font-weight: 600; color: var(--leaf); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+/* Angebote der Woche */
+#angebote { display: grid; gap: 12px; scroll-margin-top: 12px; }
+#angebote[hidden] { display: none; }
+.filter { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 10px; }
+.filter input[type=search] {
+  width: 100%; border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+  border-radius: 10px; padding: 10px 12px; font-size: 17px;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips label {
+  display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px;
+  padding: 4px 12px 4px 8px; font-size: 14px; cursor: pointer; user-select: none; background: var(--bg);
+}
+.chips label:has(input:checked) { border-color: var(--leaf); background: var(--leaf-soft); }
+.chips input { accent-color: var(--leaf); margin: 0; }
+.chips .n { color: var(--muted); font-variant-numeric: tabular-nums; }
+.schalter { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; cursor: pointer; }
+.schalter input { accent-color: var(--leaf); width: 18px; height: 18px; margin: 0; }
+.leise { color: var(--muted); font-size: 14px; margin: 0; }
+ul.angebote { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+li.angebot {
+  background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 14px; align-items: start;
+}
+.a-kette { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.a-name { font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.a-name a { color: inherit; text-decoration: none; }
+.a-name a:hover { text-decoration: underline; }
+.a-klein { font-size: 14px; color: var(--muted); overflow-wrap: anywhere; }
+.a-preis { grid-column: 2; grid-row: 1 / span 4; text-align: right; display: grid; gap: 2px; justify-items: end; }
+.a-preis .preis { font-family: var(--font-display); font-weight: 800; font-size: 22px; line-height: 1.1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.a-preis .spar { font-size: 13px; font-weight: 600; color: var(--leaf); white-space: nowrap; }
+.a-preis .uvp, .a-preis .app { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.a-text { display: grid; gap: 1px; min-width: 0; }
+button.mehr-zeigen {
+  justify-self: center; border: 1px solid var(--line); background: var(--paper); color: var(--ink);
+  border-radius: 10px; padding: 9px 16px; font-weight: 600; cursor: pointer;
+}
 footer { color: var(--muted); font-size: 13px; display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 14px; }
 footer a { color: inherit; }
 @media (prefers-reduced-motion: no-preference) {
@@ -139,7 +180,7 @@ footer a { color: inherit; }
       <h1>Schnäppchenkoch</h1>
     </div>
     <p class="slogan">Was essen wir heute – und was ist im Angebot? Gib deine Postleitzahl ein und sieh, welche Supermärkte in deiner Nähe liegen.</p>
-    <span class="badge">Testversion · Etappe 1</span>
+    <span class="badge">Testversion</span>
   </header>
 
   <form class="suche" id="suche" novalidate>
@@ -173,10 +214,25 @@ footer a { color: inherit; }
     <p class="fehlt">Gib oben deine Postleitzahl ein. Du siehst dann je Supermarkt-Kette die nächste Filiale, wie weit sie entfernt ist und einen Link zu ihren aktuellen Angeboten.</p>
   </section>
 
+  <section id="angebote" aria-labelledby="angebote-titel" hidden>
+    <div class="kopf">
+      <h2 id="angebote-titel">Angebote der Woche</h2>
+      <span class="meta" id="angebote-meta"></span>
+    </div>
+    <div class="filter">
+      <input type="search" id="angebot-suche" placeholder="Was brauchst du? z. B. Butter, Hack, Äpfel" aria-label="Angebote durchsuchen" autocomplete="off">
+      <div class="chips" id="angebot-ketten" role="group" aria-label="Ketten"></div>
+      <label class="schalter"><input type="checkbox" id="nur-ersparnis"> Nur mit echter Ersparnis (eigener Streichpreis der Kette)</label>
+    </div>
+    <p class="leise" id="angebote-fehlen"></p>
+    <ul class="angebote" id="angebot-liste"></ul>
+    <button type="button" class="mehr-zeigen" id="mehr-zeigen" hidden>Mehr zeigen</button>
+  </section>
+
   <footer>
     <span>Kartendaten: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap-Mitwirkende</a> (ODbL), einmal pro Woche aus einem Geofabrik-Auszug aufbereitet. Die Kartendaten können unvollständig sein.</span>
     <span>Datenschutz: Die Suche läuft in deinem Browser mit den Daten dieser Seite. Nur wenn eine Postleitzahl in unseren Daten fehlt, wird sie zur Suche an Nominatim (OpenStreetMap) geschickt. Die letzte Suche merkt sich nur dein Browser.</span>
-    <span>Angebote und Preise stehen auf den Seiten der Supermärkte. Schnäppchenkoch verlinkt nur dorthin.</span>
+    <span id="fuss-angebote">Angebote und Preise stehen auf den Seiten der Supermärkte. Schnäppchenkoch verlinkt nur dorthin.</span>
   </footer>
 </div>
 
@@ -322,6 +378,12 @@ function zeigen(plz, p, radiusKm, liste, stand) {
       el("span", { class: "k-adresse", text: `${adresse(naechste)} · ${g.filialen.length} ${g.filialen.length === 1 ? "Filiale" : "Filialen"} im Umkreis` }),
       el("span", { class: "preisschild", text: fmtKm(naechste.km) }),
       links);
+    const n = angebotDaten?.ketten?.[g.kette.id];
+    if (n) {
+      const b = el("button", { type: "button", text: "anzeigen" });
+      b.addEventListener("click", () => nurKette(g.kette.id));
+      li.append(el("p", { class: "k-zahl" }, document.createTextNode(`${n} Angebote ab ${fmtTag(angebotDaten.woche_ab)} · `), b));
+    }
     if (g.filialen.length > 1) {
       const ol = el("ol");
       g.filialen.slice(1).forEach((f) => ol.append(el("li", { text: `${adresse(f)} – ${fmtKm(f.km)}` })));
@@ -339,6 +401,104 @@ function zeigen(plz, p, radiusKm, liste, stand) {
   }
 }
 
+// ---------- Angebote der Woche (Etappe 2) ----------
+// data/angebote/aktuell.json kommt aus dem privaten Projekt (tools/angebote/fuer_web.py). Fehlt die Datei,
+// bleibt alles wie in Etappe 1: nur Links zu den Angebotsseiten der Ketten.
+const euro = (x) => x.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+const TAGE = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+const fmtTag = (iso) => { const d = new Date(iso + "T12:00:00Z"); return `${TAGE[d.getUTCDay()]}. ${d.getUTCDate()}.${d.getUTCMonth() + 1}.`; };
+const SCHRITT = 40;
+let angebotDaten;            // undefined = noch nicht geladen, null = keine Angebotsdatei
+let angebotAnzahl = SCHRITT;
+
+async function ladeAngebote() {
+  if (angebotDaten !== undefined) return angebotDaten;
+  let d = null;
+  try { d = await ladeJson("angebote/aktuell.json"); } catch { d = null; }
+  if (!d) return (angebotDaten = null);
+  const liste = d.angebote.map((z) => Object.fromEntries(d.felder.map((f, i) => [f, z[i]])));
+  for (const a of liste) {
+    // Ersparnis nur gegen den eigenen Streichpreis der Kette – UVP zählt nicht.
+    a.ersparnis = a.vergleich_art === "statt" && a.vergleichspreis > a.preis ? Math.round((a.vergleichspreis - a.preis) * 100) / 100 : 0;
+    a.prozent = a.ersparnis ? a.ersparnis / a.vergleichspreis : 0;
+    a.name = a.marke && !a.produkt.toLocaleLowerCase("de").includes(a.marke.toLocaleLowerCase("de")) ? `${a.marke} ${a.produkt}` : a.produkt;
+    a.suchtext = [a.name, a.menge].filter(Boolean).join(" ").toLocaleLowerCase("de");
+  }
+  return (angebotDaten = { ...d, liste });
+}
+
+function angebotLi(a) {
+  const menge = a.menge && a.menge.trim() !== "je" ? a.menge : null;
+  const klein = [menge, a.grundpreis && !(a.menge || "").includes(a.grundpreis) ? a.grundpreis : null]
+    .filter(Boolean).join(" · ").replace(/(\d)\.(\d{2})(?!\d)/g, "$1,$2");   // 2.20 → 2,20 (1.000 g bleibt)
+  const zeit = a.gueltig_bis && a.gueltig_bis !== a.gueltig_von ? `${fmtTag(a.gueltig_von)} – ${fmtTag(a.gueltig_bis)}` : `ab ${fmtTag(a.gueltig_von)}`;
+  const preis = el("div", { class: "a-preis" }, el("span", { class: "preis", text: (a.ab ? "ab " : "") + euro(a.preis) }));
+  if (a.ersparnis) preis.append(el("span", { class: "spar", text: `statt ${euro(a.vergleichspreis)} · −${euro(a.ersparnis)}` }));
+  else if (a.vergleich_art === "uvp" && a.vergleichspreis) {
+    preis.append(el("span", { class: "uvp", title: "Unverbindliche Preisempfehlung des Herstellers – zählt bei uns nicht als Ersparnis", text: `UVP ${euro(a.vergleichspreis)}` }));
+  }
+  if (a.app_preis && a.app_preis < a.preis) preis.append(el("span", { class: "app", text: `mit App ${euro(a.app_preis)}` }));
+  return el("li", { class: "angebot" },
+    el("div", { class: "a-text" },
+      el("span", { class: "a-kette", text: KETTE[a.kette]?.name || a.kette }),
+      el("span", { class: "a-name" }, a.quelle ? el("a", { href: a.quelle, target: "_blank", rel: "noopener", text: a.name }) : document.createTextNode(a.name)),
+      klein ? el("span", { class: "a-klein", text: klein }) : null,
+      el("span", { class: "a-klein", text: zeit })),
+    preis);
+}
+
+function angeboteListe() {
+  const d = angebotDaten;
+  const worte = $("angebot-suche").value.toLocaleLowerCase("de").split(/\s+/).filter(Boolean);
+  const ketten = new Set([...$("angebot-ketten").querySelectorAll("input:checked")].map((i) => i.value));
+  const nurSpar = $("nur-ersparnis").checked;
+  const treffer = d.liste.filter((a) => ketten.has(a.kette) && (!nurSpar || a.ersparnis) && worte.every((w) => a.suchtext.includes(w)));
+  treffer.sort((a, b) => b.prozent - a.prozent || a.preis - b.preis);   // echte Ersparnis zuerst, dann günstig
+  const ul = $("angebot-liste");
+  ul.replaceChildren(...treffer.slice(0, angebotAnzahl).map(angebotLi));
+  if (!treffer.length) ul.append(el("li", { class: "leise", text: "Keine passenden Angebote. Andere Suche oder mehr Ketten auswählen." }));
+  const rest = treffer.length - angebotAnzahl;
+  $("mehr-zeigen").hidden = rest <= 0;
+  $("mehr-zeigen").textContent = `Mehr zeigen (${rest} weitere)`;
+  const stand = new Date(d.stand + "T12:00:00Z").toLocaleDateString("de-DE");
+  $("angebote-meta").textContent = `${treffer.length} ${treffer.length === 1 ? "Angebot" : "Angebote"} · Stand ${stand}`;
+}
+
+function angeboteZeigen(idsImUmkreis) {
+  const d = angebotDaten, sek = $("angebote");
+  if (!d) { sek.hidden = true; return; }
+  const mit = idsImUmkreis.filter((id) => d.ketten[id]);
+  const ohne = idsImUmkreis.filter((id) => !d.ketten[id] && id !== "aldi");
+  $("angebote-titel").textContent = `Angebote ab ${fmtTag(d.woche_ab)}`;
+  $("angebot-ketten").replaceChildren(...mit.map((id) => el("label", {},
+    Object.assign(el("input", { type: "checkbox", value: id }), { checked: true }),
+    document.createTextNode(KETTE[id].name + " "), el("span", { class: "n", text: String(d.ketten[id]) }))));
+  $("angebote-fehlen").textContent = ohne.length
+    ? `Noch nicht automatisch dabei: ${ohne.map((id) => KETTE[id].name).join(", ")} – deren Angebote findest du über die Links oben.` : "";
+  $("angebote-fehlen").hidden = !ohne.length;
+  sek.querySelector(".filter").hidden = !mit.length;
+  $("angebot-liste").hidden = !mit.length;
+  if (!mit.length) $("mehr-zeigen").hidden = true;
+  angebotAnzahl = SCHRITT;
+  if (mit.length) angeboteListe();
+  else $("angebote-meta").textContent = "";
+  sek.hidden = false;
+  $("fuss-angebote").textContent = "Angebote und Preise: von den Seiten der Supermärkte gelesen, maßgeblich ist der Preis im Markt. " +
+    "Ersparnis zeigen wir nur gegenüber dem eigenen Streichpreis der Kette, nicht gegenüber der UVP des Herstellers.";
+}
+
+function nurKette(id) {
+  for (const i of $("angebot-ketten").querySelectorAll("input")) i.checked = i.value === id;
+  angebotAnzahl = SCHRITT;
+  angeboteListe();
+  $("angebote").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+}
+
+for (const [id, ev] of [["angebot-suche", "input"], ["angebot-ketten", "change"], ["nur-ersparnis", "change"]]) {
+  $(id).addEventListener(ev, () => { angebotAnzahl = SCHRITT; angeboteListe(); });
+}
+$("mehr-zeigen").addEventListener("click", () => { angebotAnzahl += SCHRITT; angeboteListe(); });
+
 async function suchen() {
   const plz = $("plz").value.trim();
   const radiusKm = +$("radius").value;
@@ -353,10 +513,12 @@ async function suchen() {
   $("los").disabled = true;
   try {
     status.textContent = "Märkte werden gesucht …";
-    const [p, meta] = await Promise.all([plzKoordinaten(plz), ladeJson("meta.json").catch(() => null)]);
+    const [p, meta] = await Promise.all([plzKoordinaten(plz), ladeJson("meta.json").catch(() => null), ladeAngebote()]);
     const eintraege = await maerkte(p, radiusKm);
     const stand = meta?.erstellt ? new Date(meta.erstellt + "T12:00:00Z").toLocaleDateString("de-DE") : "";
-    zeigen(plz, p, radiusKm, auswerten(p, eintraege, radiusKm), stand);
+    const liste = auswerten(p, eintraege, radiusKm);
+    zeigen(plz, p, radiusKm, liste, stand);
+    angeboteZeigen(liste.map((g) => g.kette.id));
     status.textContent = "";
     speicherSchreiben("letzte", { plz, radiusKm });
   } catch (e) {
