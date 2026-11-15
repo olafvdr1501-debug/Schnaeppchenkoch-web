@@ -4,7 +4,8 @@ Eingabe: ein .osm.pbf (vorher mit osmium tags-filter auf Supermärkte und Postle
 Ausgabe (im Zielordner):
   meta.json                 Stand der Daten, Anzahl Märkte und Postleitzahlen
   plz/<NN>.json             Postleitzahl -> [Breite, Länge, Ort], aufgeteilt nach den ersten zwei Ziffern
-  maerkte/<B>_<L>.json      Märkte der App-Ketten je 1°x1°-Kachel: [kette, Breite, Länge, Straße, Ort, Webseite]
+  maerkte/<B>_<L>.json      Märkte der App-Ketten je 1°x1°-Kachel: [kette, Breite, Länge, Straße, Ort, Webseite, PLZ]
+  haendlerseiten.json       eigene Webseiten selbstständiger Kaufleute (Edeka, Rewe, Nahkauf, Marktkauf): Domain -> Anzahl Märkte
 
 Daten: © OpenStreetMap-Mitwirkende, Lizenz ODbL (abgeleitete Datenbank, ebenfalls ODbL).
 Aufruf: python tools/daten_bauen.py auszug.osm.pbf data
@@ -37,6 +38,18 @@ KETTEN = [
 ]
 KETTEN = [(k, wd, re.compile(m, re.I), re.compile(d, re.I) if d else None) for k, wd, m, d in KETTEN]
 NETTO_DAENISCH = "Q552652"
+# Ketten mit selbstständigen Kaufleuten: deren eigene Webseite (eigene Domain) ist der beste Link zu den Angeboten.
+HAENDLER_KETTEN = {"edeka", "rewe", "nahkauf", "marktkauf"}
+# Keine Händlerseiten: Prospekt-Portale, soziale Netze, Verzeichnisse, Kurzlinks.
+KEINE_HAENDLERSEITE = re.compile(
+    r"kaufda|marktguru|meinprospekt|offerista|wogibtswas|kimbino|prospekt|mydealz|facebook|instagram|tiktok|youtube|"
+    r"twitter|//x\.com|whatsapp|t\.me/|linktr\.ee|google\.|goo\.gl|bit\.ly|yelp|tripadvisor|foursquare|wikipedia|"
+    r"gelbeseiten|dasoertliche|11880|golocal|meinestadt|payback|lieferando|bringmeister", re.I)
+
+
+def domain_von(web: str) -> str:
+    m = re.match(r"(?:https?://)?(?:www\.)?([^/?#:]+)", web.strip(), re.I)
+    return m.group(1).lower() if m else ""
 
 
 def kette_von(tags) -> str | None:
@@ -61,6 +74,8 @@ def webseite(k: str, tags) -> str:
     for kid, _, _, domain in KETTEN:
         if kid == k and domain and web and domain.search(web):
             return web
+    if k in HAENDLER_KETTEN and web and "." in domain_von(web) and not KEINE_HAENDLERSEITE.search(web):
+        return web if re.match(r"https?://", web, re.I) else "https://" + web   # eigene Seite des Kaufmanns
     return ""  # fremde Seiten (z. B. Prospekt-Portale) werden nicht übernommen
 
 
@@ -77,7 +92,7 @@ class Sammler(osmium.SimpleHandler):
             return
         strasse = " ".join(v for v in (tags.get("addr:street"), tags.get("addr:housenumber")) if v)
         ort = tags.get("addr:city") or tags.get("addr:place") or tags.get("addr:suburb") or ""
-        self.maerkte.append([k, round(lat, 5), round(lon, 5), strasse, ort, webseite(k, tags)])
+        self.maerkte.append([k, round(lat, 5), round(lon, 5), strasse, ort, webseite(k, tags), tags.get("addr:postcode") or ""])
 
     def node(self, n):
         if n.tags.get("shop") == "supermarket" and n.location.valid():
@@ -135,8 +150,16 @@ def main(eingabe: str, ziel: str) -> None:
         (ziel / "plz" / f"{vorne}.json").write_text(json.dumps(d, ensure_ascii=False, separators=(",", ":"), sort_keys=True), encoding="utf-8")
 
     je_kette = defaultdict(int)
+    haendler = defaultdict(lambda: defaultdict(int))
     for m in maerkte:
         je_kette[m[0]] += 1
+        if m[0] in HAENDLER_KETTEN and m[5]:
+            d = domain_von(m[5])
+            if not any(dom and dom.search(m[5]) for kid, _, _, dom in KETTEN if kid == m[0]):
+                haendler[m[0]][d] += 1
+    (ziel / "haendlerseiten.json").write_text(json.dumps(
+        {k: dict(sorted(v.items(), key=lambda x: (-x[1], x[0]))) for k, v in sorted(haendler.items())},
+        ensure_ascii=False, indent=0), encoding="utf-8")
     meta = {
         "erstellt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d"),
         "quelle": "OpenStreetMap (Geofabrik-Auszug Deutschland)",
@@ -145,6 +168,7 @@ def main(eingabe: str, ziel: str) -> None:
         "postleitzahlen": len(s.plz),
         "kacheln": len(kacheln),
         "je_kette": dict(sorted(je_kette.items())),
+        "haendlerseiten": {k: {"domains": len(v), "maerkte": sum(v.values())} for k, v in sorted(haendler.items())},
     }
     (ziel / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
     print(json.dumps(meta, ensure_ascii=False, indent=1))
