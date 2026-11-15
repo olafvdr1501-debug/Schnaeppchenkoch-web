@@ -2,21 +2,39 @@
  "erstellt": "2026-11-15",
  "quelle": "OpenStreetMap (Geofabrik-Auszug Deutschland)",
  "lizenz": "© OpenStreetMap-Mitwirkende, ODbL",
- "maerkte": 25621,
+ "maerkte": 25629,
  "postleitzahlen": 8172,
  "kacheln": 70,
  "je_kette": {
   "aldi": 5,
-  "aldi-nord": 2209,
+  "aldi-nord": 2211,
   "aldi-sued": 2007,
-  "edeka": 5246,
+  "edeka": 5250,
   "kaufland": 785,
   "lidl": 3256,
   "marktkauf": 108,
   "nahkauf": 481,
-  "netto": 4328,
+  "netto": 4330,
   "norma": 1348,
   "penny": 2129,
   "rewe": 3719
+ },
+ "haendlerseiten": {
+  "edeka": {
+   "domains": 471,
+   "maerkte": 789
+  },
+  "marktkauf": {
+   "domains": 21,
+   "maerkte": 38
+  },
+  "nahkauf": {
+   "domains": 21,
+   "maerkte": 44
+  },
+  "rewe": {
+   "domains": 81,
+   "maerkte": 141
+  }
  }
 }
