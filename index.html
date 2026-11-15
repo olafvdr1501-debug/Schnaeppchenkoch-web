@@ -174,38 +174,49 @@ footer a { color: inherit; }
   </section>
 
   <footer>
-    <span>Kartendaten: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap-Mitwirkende</a> (ODbL), abgefragt über Nominatim und Overpass. Die Kartendaten können unvollständig sein.</span>
-    <span>Datenschutz: Die eingegebene Postleitzahl wird zur Suche an diese OpenStreetMap-Dienste geschickt. Diese Seite speichert nichts auf einem Server; die letzte Suche merkt sich nur dein Browser.</span>
+    <span>Kartendaten: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap-Mitwirkende</a> (ODbL), einmal pro Woche aus einem Geofabrik-Auszug aufbereitet. Die Kartendaten können unvollständig sein.</span>
+    <span>Datenschutz: Die Suche läuft in deinem Browser mit den Daten dieser Seite. Nur wenn eine Postleitzahl in unseren Daten fehlt, wird sie zur Suche an Nominatim (OpenStreetMap) geschickt. Die letzte Suche merkt sich nur dein Browser.</span>
     <span>Angebote und Preise stehen auf den Seiten der Supermärkte. Schnäppchenkoch verlinkt nur dorthin.</span>
   </footer>
 </div>
 
 <script>
 "use strict";
-// Ketten der App (die vier großen Gruppen + Norma). Erkennung über Name/Marke, Wikidata und Webseite.
-// Wikidata-Nummern nur dort, wo sie in echten OSM-Daten geprüft wurden (14.11.2026).
+// Ketten der App (die vier großen Gruppen + Norma). Die Zuordnung der Märkte passiert vorab in tools/daten_bauen.py.
 const KETTEN = [
-  { id: "aldi-nord", name: "Aldi Nord", wd: ["Q41171373"], muster: /aldi\s*nord/i, domain: /aldi-nord\.de/i, angebote: "https://www.aldi-nord.de/angebote.html" },
-  { id: "aldi-sued", name: "Aldi Süd", wd: [], muster: /aldi\s*s(ü|ue|u)d/i, domain: /aldi-sued\.de/i, angebote: "https://www.aldi-sued.de/angebote" },
-  { id: "aldi", name: "Aldi", wd: [], muster: /^aldi\b/i, domain: null, angebote: null },
-  { id: "lidl", name: "Lidl", wd: ["Q151954"], muster: /lidl/i, domain: /lidl\.de/i, angebote: "https://www.lidl.de/c/online-prospekte/s10005610" },
-  { id: "kaufland", name: "Kaufland", wd: [], muster: /kaufland/i, domain: /kaufland\.de/i, angebote: "https://filiale.kaufland.de/angebote/aktuelle-woche.html" },
-  { id: "marktkauf", name: "Marktkauf", wd: [], muster: /marktkauf/i, domain: /marktkauf\.de/i, angebote: "https://www.marktkauf.de/" },
-  { id: "edeka", name: "Edeka", wd: ["Q701755"], muster: /edeka|e[\s-]?center/i, domain: /(^|\.)edeka\.de/i, angebote: "https://www.edeka.de/" },
-  { id: "netto", name: "Netto Marken-Discount", wd: ["Q879858"], muster: /netto/i, domain: /netto-online\.de/i, angebote: "https://www.netto-online.de/filialangebote" },
-  { id: "nahkauf", name: "Nahkauf", wd: [], muster: /nahkauf/i, domain: /nahkauf\.de/i, angebote: "https://www.nahkauf.de/" },
-  { id: "rewe", name: "Rewe", wd: ["Q16968817"], muster: /rewe/i, domain: /rewe\.de/i, angebote: "https://www.rewe.de/angebote/" },
-  { id: "penny", name: "Penny", wd: ["Q284688"], muster: /penny/i, domain: /penny\.de/i, angebote: "https://www.penny.de/angebote" },
-  { id: "norma", name: "Norma", wd: [], muster: /\bnorma\b/i, domain: /norma-online\.de/i, angebote: "https://www.norma-online.de/de/angebote/" },
+  { id: "aldi-nord", name: "Aldi Nord", angebote: "https://www.aldi-nord.de/angebote.html" },
+  { id: "aldi-sued", name: "Aldi Süd", angebote: "https://www.aldi-sued.de/angebote" },
+  { id: "aldi", name: "Aldi", angebote: null },
+  { id: "lidl", name: "Lidl", angebote: "https://www.lidl.de/c/online-prospekte/s10005610" },
+  { id: "kaufland", name: "Kaufland", angebote: "https://filiale.kaufland.de/angebote/aktuelle-woche.html" },
+  { id: "marktkauf", name: "Marktkauf", angebote: "https://www.marktkauf.de/" },
+  { id: "edeka", name: "Edeka", angebote: "https://www.edeka.de/" },
+  { id: "netto", name: "Netto Marken-Discount", angebote: "https://www.netto-online.de/filialangebote" },
+  { id: "nahkauf", name: "Nahkauf", angebote: "https://www.nahkauf.de/" },
+  { id: "rewe", name: "Rewe", angebote: "https://www.rewe.de/angebote/" },
+  { id: "penny", name: "Penny", angebote: "https://www.penny.de/angebote" },
+  { id: "norma", name: "Norma", angebote: "https://www.norma-online.de/de/angebote/" },
 ];
-const NETTO_DAENISCH = "Q552652"; // „Netto“ mit dem Scottie-Hund (andere Firma) – nicht Teil der App
-const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter"];
+const KETTE = Object.fromEntries(KETTEN.map((k) => [k.id, k]));
+const DATEN = "data/";
 
 const $ = (id) => document.getElementById(id);
 const fmtKm = (km) => km.toLocaleString("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " km";
 
 function speicherLesen(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } }
 function speicherSchreiben(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* egal */ } }
+
+const dateiCache = new Map();
+async function ladeJson(pfad) {
+  if (!dateiCache.has(pfad)) {
+    dateiCache.set(pfad, fetch(DATEN + pfad).then((r) => {
+      if (r.status === 404) return null;
+      if (!r.ok) throw new Error("Die Kartendaten konnten nicht geladen werden (Fehler " + r.status + "). Bitte die Seite neu laden.");
+      return r.json();
+    }).catch((e) => { dateiCache.delete(pfad); throw e; }));
+  }
+  return dateiCache.get(pfad);
+}
 
 function km(a, b) {
   const R = 6371, rad = (x) => x * Math.PI / 180;
@@ -214,42 +225,27 @@ function km(a, b) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-function kettenVon(tags) {
-  const text = [tags.brand, tags.name, tags["brand:de"]].filter(Boolean).join(" | ");
-  const wd = tags["brand:wikidata"] || "";
-  const web = tags.website || tags["contact:website"] || tags.url || "";
-  if (wd === NETTO_DAENISCH) return null;
-  for (const k of KETTEN) {
-    if (k.wd.includes(wd) || (text && k.muster.test(text)) || (k.domain && web && k.domain.test(web))) {
-      if (k.id === "aldi") { // „Aldi“ ohne Nord/Süd: über die Webseite zuordnen, wenn möglich
-        if (/aldi-sued\.de/i.test(web)) return KETTEN.find((x) => x.id === "aldi-sued");
-        if (/aldi-nord\.de/i.test(web) || wd === "Q41171373") return KETTEN.find((x) => x.id === "aldi-nord");
-      }
-      return k;
-    }
-  }
-  return null;
+function adresse(f) {
+  return [f.strasse, f.ort].filter(Boolean).join(", ") || "Adresse nicht in den Kartendaten";
 }
 
-function adresse(t) {
-  const strasse = [t["addr:street"], t["addr:housenumber"]].filter(Boolean).join(" ");
-  const ort = t["addr:city"] || t["addr:place"] || t["addr:suburb"] || "";
-  return [strasse, ort].filter(Boolean).join(", ") || "Adresse nicht in den Kartendaten";
-}
-
-function angeboteLink(kette, tags) {
-  const web = tags.website || tags["contact:website"] || "";
-  if (kette.domain && web && kette.domain.test(web)) return { url: web, text: "Angebote dieser Filiale" };
+function angeboteLink(kette, f) {
+  if (f.web) return { url: f.web, text: "Angebote dieser Filiale" };
   if (kette.angebote) return { url: kette.angebote, text: "Angebote von " + kette.name };
   return null;
 }
 
+// Postleitzahl -> Mittelpunkt: zuerst aus unseren Daten, nur wenn sie dort fehlt live bei Nominatim.
 async function plzKoordinaten(plz) {
+  const gruppe = await ladeJson("plz/" + plz.slice(0, 2) + ".json");
+  const w = gruppe && gruppe[plz];
+  if (w) return { lat: w[0], lon: w[1], name: w[2] };
   const cache = speicherLesen("plz2:" + plz);
   if (cache) return cache;
   const url = "https://nominatim.openstreetmap.org/search?postalcode=" + plz + "&country=de&format=jsonv2&limit=1";
-  const r = await fetch(url, { headers: { "Accept-Language": "de" } });
-  if (!r.ok) throw new Error("Die Postleitzahlen-Suche antwortet gerade nicht (Fehler " + r.status + "). Bitte in einer Minute erneut versuchen.");
+  let r;
+  try { r = await fetch(url, { headers: { "Accept-Language": "de" } }); } catch { r = null; }
+  if (!r || !r.ok) throw new Error("Zur Postleitzahl " + plz + " haben wir keine Daten. Bitte die Eingabe prüfen.");
   const d = await r.json();
   if (!d.length) throw new Error("Zur Postleitzahl " + plz + " wurde kein Ort gefunden. Bitte die Eingabe prüfen.");
   const teile = d[0].display_name.split(",").map((s) => s.trim()).filter((s) => !/^\d{5}$/.test(s));
@@ -258,30 +254,27 @@ async function plzKoordinaten(plz) {
   return p;
 }
 
+// Märkte: die 1°x1°-Kacheln laden, die der Umkreis berührt.
 async function maerkte(p, radiusKm) {
-  const ql = `[out:json][timeout:25];nwr["shop"="supermarket"](around:${radiusKm * 1000},${p.lat},${p.lon});out center tags;`;
-  let letzterFehler;
-  for (const ep of OVERPASS) {
-    try {
-      const r = await fetch(ep, { method: "POST", body: new URLSearchParams({ data: ql }) });
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      return await r.json();
-    } catch (e) { letzterFehler = e; }
+  const dLat = radiusKm / 111.32;
+  const dLon = radiusKm / (111.32 * Math.cos(p.lat * Math.PI / 180));
+  const namen = [];
+  for (let b = Math.floor(p.lat - dLat); b <= Math.floor(p.lat + dLat); b++) {
+    for (let l = Math.floor(p.lon - dLon); l <= Math.floor(p.lon + dLon); l++) namen.push(`${b}_${l}`);
   }
-  throw new Error("Die Märkte-Suche ist gerade überlastet (" + letzterFehler.message + "). Bitte in ein bis zwei Minuten erneut versuchen.");
+  const listen = await Promise.all(namen.map((n) => ladeJson("maerkte/" + n + ".json")));
+  return listen.filter(Boolean).flat();
 }
 
-function auswerten(p, d, radiusKm) {
+function auswerten(p, eintraege, radiusKm) {
   const gruppen = new Map();
-  for (const el of d.elements || []) {
-    const lat = el.lat ?? el.center?.lat, lon = el.lon ?? el.center?.lon;
-    if (lat == null || !el.tags) continue;
-    const k = kettenVon(el.tags);
-    if (!k) continue;
-    const eintrag = { km: km(p, { lat, lon }), lat, lon, tags: el.tags };
-    if (eintrag.km > radiusKm) continue; // Overpass misst bis zum Gebäuderand; wir zählen ab dem Mittelpunkt
-    if (!gruppen.has(k.id)) gruppen.set(k.id, { kette: k, filialen: [] });
-    gruppen.get(k.id).filialen.push(eintrag);
+  for (const [kid, lat, lon, strasse, ort, web] of eintraege) {
+    const kette = KETTE[kid];
+    if (!kette) continue;
+    const f = { km: km(p, { lat, lon }), lat, lon, strasse, ort, web };
+    if (f.km > radiusKm) continue;
+    if (!gruppen.has(kid)) gruppen.set(kid, { kette, filialen: [] });
+    gruppen.get(kid).filialen.push(f);
   }
   const liste = [...gruppen.values()];
   liste.forEach((g) => g.filialen.sort((a, b) => a.km - b.km));
@@ -304,7 +297,7 @@ function zeigen(plz, p, radiusKm, liste, stand) {
   const anzahl = liste.reduce((s, g) => s + g.filialen.length, 0);
   ziel.append(el("div", { class: "kopf" },
     el("h2", { text: `${liste.length} ${liste.length === 1 ? "Kette" : "Ketten"} im Umkreis von ${radiusKm} km` }),
-    el("span", { class: "meta", text: `${plz} ${p.name} · ${anzahl} Filialen${stand ? " · Kartenstand " + stand : ""}` })));
+    el("span", { class: "meta", text: `${plz} ${p.name} · ${anzahl} ${anzahl === 1 ? "Filiale" : "Filialen"}${stand ? " · Kartenstand " + stand : ""}` })));
 
   const groessere = [...$("radius").options].map((o) => +o.value).find((r) => r > radiusKm);
   if (liste.length < 3 && groessere) {
@@ -316,7 +309,7 @@ function zeigen(plz, p, radiusKm, liste, stand) {
   const ul = el("ul", { class: "ketten" });
   for (const g of liste) {
     const naechste = g.filialen[0];
-    const link = angeboteLink(g.kette, naechste.tags);
+    const link = angeboteLink(g.kette, naechste);
     const links = el("div", { class: "k-links" });
     if (link) links.append(el("a", { href: link.url, target: "_blank", rel: "noopener", text: link.text }));
     if (g.kette.id === "aldi") {
@@ -326,12 +319,12 @@ function zeigen(plz, p, radiusKm, liste, stand) {
     links.append(el("a", { href: `https://www.openstreetmap.org/?mlat=${naechste.lat}&mlon=${naechste.lon}#map=17/${naechste.lat}/${naechste.lon}`, target: "_blank", rel: "noopener", text: "Auf der Karte" }));
     const li = el("li", { class: "kette" },
       el("span", { class: "k-name", text: g.kette.name }),
-      el("span", { class: "k-adresse", text: `${adresse(naechste.tags)} · ${g.filialen.length} ${g.filialen.length === 1 ? "Filiale" : "Filialen"} im Umkreis` }),
+      el("span", { class: "k-adresse", text: `${adresse(naechste)} · ${g.filialen.length} ${g.filialen.length === 1 ? "Filiale" : "Filialen"} im Umkreis` }),
       el("span", { class: "preisschild", text: fmtKm(naechste.km) }),
       links);
     if (g.filialen.length > 1) {
       const ol = el("ol");
-      g.filialen.slice(1).forEach((f) => ol.append(el("li", { text: `${adresse(f.tags)} – ${fmtKm(f.km)}` })));
+      g.filialen.slice(1).forEach((f) => ol.append(el("li", { text: `${adresse(f)} – ${fmtKm(f.km)}` })));
       li.append(el("details", { class: "mehr" }, el("summary", { text: "Weitere Filialen" }), ol));
     }
     ul.append(li);
@@ -359,12 +352,11 @@ async function suchen() {
   }
   $("los").disabled = true;
   try {
-    status.textContent = "Postleitzahl wird gesucht …";
-    const p = await plzKoordinaten(plz);
-    status.textContent = `Märkte im Umkreis von ${radiusKm} km um ${p.name} werden gesucht …`;
-    const d = await maerkte(p, radiusKm);
-    const stand = d.osm3s?.timestamp_osm_base ? new Date(d.osm3s.timestamp_osm_base).toLocaleDateString("de-DE") : "";
-    zeigen(plz, p, radiusKm, auswerten(p, d, radiusKm), stand);
+    status.textContent = "Märkte werden gesucht …";
+    const [p, meta] = await Promise.all([plzKoordinaten(plz), ladeJson("meta.json").catch(() => null)]);
+    const eintraege = await maerkte(p, radiusKm);
+    const stand = meta?.erstellt ? new Date(meta.erstellt + "T12:00:00Z").toLocaleDateString("de-DE") : "";
+    zeigen(plz, p, radiusKm, auswerten(p, eintraege, radiusKm), stand);
     status.textContent = "";
     speicherSchreiben("letzte", { plz, radiusKm });
   } catch (e) {
