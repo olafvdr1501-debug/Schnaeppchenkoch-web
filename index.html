@@ -287,6 +287,9 @@ function adresse(f) {
 }
 
 function angeboteLink(kette, f) {
+  // Edeka: Marktseite /maerkte/<Nummer>/ → direkt zur Angebotsseite dieses Markts (gleiches Muster wie edeka.de selbst)
+  const edeka = kette.id === "edeka" && /edeka\.de\/maerkte\/(\d+)/.exec(f.web || "");
+  if (edeka) return { url: `https://www.edeka.de/maerkte/${edeka[1]}/angebote/`, text: "Prospekt dieses EDEKA-Markts" };
   if (f.web) return { url: f.web, text: "Angebote dieser Filiale" };
   if (kette.angebote) return { url: kette.angebote, text: "Angebote von " + kette.name };
   return null;
