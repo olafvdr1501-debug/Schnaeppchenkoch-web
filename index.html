@@ -155,6 +155,18 @@ li.angebot {
 .a-preis .spar { font-size: 13px; font-weight: 600; color: var(--leaf); white-space: nowrap; }
 .a-preis .uvp, .a-preis .app { font-size: 13px; color: var(--muted); white-space: nowrap; }
 .a-text { display: grid; gap: 1px; min-width: 0; }
+.kochideen { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 10px; }
+.kochideen[hidden] { display: none; }
+.kochideen h3 { font-family: var(--font-display); font-weight: 600; font-size: 19px; margin: 0; }
+.kochideen ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+li.idee { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: start; }
+.i-zutat { font-family: var(--font-display); font-weight: 600; font-size: 17px; line-height: 1.25; }
+.i-klein { font-size: 14px; color: var(--muted); overflow-wrap: anywhere; }
+.i-preis { grid-column: 2; grid-row: 1 / span 2; text-align: right; display: grid; gap: 1px; justify-items: end; }
+.i-preis .preis { font-family: var(--font-display); font-weight: 800; font-size: 19px; line-height: 1.1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.i-preis .spar { font-size: 13px; font-weight: 600; color: var(--leaf); white-space: nowrap; }
+.i-links { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 4px; font-size: 15px; }
+.i-links a, .i-links button { font: inherit; font-weight: 600; color: var(--leaf); background: none; border: 0; padding: 4px 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 button.mehr-zeigen {
   justify-self: center; border: 1px solid var(--line); background: var(--paper); color: var(--ink);
   border-radius: 10px; padding: 9px 16px; font-weight: 600; cursor: pointer;
@@ -218,6 +230,13 @@ footer a { color: inherit; }
     <div class="kopf">
       <h2 id="angebote-titel">Angebote der Woche</h2>
       <span class="meta" id="angebote-meta"></span>
+    </div>
+    <div class="kochideen" id="kochideen" hidden>
+      <h3>Kochideen aus den Angeboten</h3>
+      <p class="leise">Frische Zutaten, die diese Woche in deinem Umkreis im Angebot sind – mit einem Tipp zu passenden Rezepten.</p>
+      <ul id="kochideen-liste"></ul>
+      <button type="button" class="mehr-zeigen" id="kochideen-mehr" hidden></button>
+      <p class="leise">Die Rezepte öffnen sich bei Chefkoch. Achte dort auf Bewertung und Zutaten.</p>
     </div>
     <div class="filter">
       <input type="search" id="angebot-suche" placeholder="Was brauchst du? z. B. Butter, Hack, Äpfel" aria-label="Angebote durchsuchen" autocomplete="off">
@@ -455,7 +474,7 @@ async function ladeAngebote() {
     a.ersparnis = a.vergleich_art === "statt" && a.vergleichspreis > a.preis ? Math.round((a.vergleichspreis - a.preis) * 100) / 100 : 0;
     a.prozent = a.ersparnis ? a.ersparnis / a.vergleichspreis : 0;
     a.name = a.marke && !a.produkt.toLocaleLowerCase("de").includes(a.marke.toLocaleLowerCase("de")) ? `${a.marke} ${a.produkt}` : a.produkt;
-    a.suchtext = [a.name, a.menge].filter(Boolean).join(" ").toLocaleLowerCase("de");
+    a.suchtext = [a.name, a.menge, a.zutat].filter(Boolean).join(" ").toLocaleLowerCase("de");
   }
   // Zuordnung der Kaufleute: über ihre Domain (aus den Kartendaten) oder über PLZ + Straße ihrer Märkte
   const nachDomain = new Map(), nachAdresse = new Map();
@@ -516,6 +535,48 @@ function angeboteListe() {
   $("angebote-meta").textContent = `${treffer.length} ${treffer.length === 1 ? "Angebot" : "Angebote"} · Stand ${stand}`;
 }
 
+// Kochideen: je Kochzutat (tools/angebote/zutat.py) das beste Angebot im Umkreis und ein Link zur Rezeptsuche.
+const IDEEN_ZUERST = 8;
+let alleIdeen = false;
+function kochideenZeigen(ids) {
+  const d = angebotDaten, box = $("kochideen"), gruppen = new Map();
+  for (const a of d.liste) {
+    if (!a.zutat || !ids.includes(a.kette) || !sichtbar(a)) continue;
+    if (!gruppen.has(a.zutat)) gruppen.set(a.zutat, []);
+    gruppen.get(a.zutat).push(a);
+  }
+  // Je Zutat: echte Ersparnis zuerst, sonst der niedrigste Preis. Reihenfolge der Zutaten genauso, dann nach Auswahl.
+  const ideen = [...gruppen].map(([zutat, liste]) => {
+    liste.sort((x, y) => y.prozent - x.prozent || x.preis - y.preis);
+    return { zutat, liste, bestes: liste[0] };
+  }).sort((x, y) => y.bestes.prozent - x.bestes.prozent || y.liste.length - x.liste.length || x.zutat.localeCompare(y.zutat, "de"));
+  box.hidden = !ideen.length;
+  if (!ideen.length) return;
+  $("kochideen-liste").replaceChildren(...ideen.slice(0, alleIdeen ? ideen.length : IDEEN_ZUERST).map(({ zutat, liste, bestes: a }) => {
+    const menge = a.menge && a.menge.trim() !== "je" ? " · " + a.menge.replace(/(\d)\.(\d{2})(?!\d)/g, "$1,$2") : "";
+    const preis = el("div", { class: "i-preis" }, el("span", { class: "preis", text: (a.ab ? "ab " : "") + euro(a.preis) }));
+    if (a.ersparnis) preis.append(el("span", { class: "spar", text: `statt ${euro(a.vergleichspreis)}` }));
+    const zeigen = el("button", { type: "button", text: liste.length === 1 ? "Angebot zeigen" : `Alle ${liste.length} Angebote` });
+    zeigen.addEventListener("click", () => {
+      $("angebot-suche").value = zutat;
+      for (const i of $("angebot-ketten").querySelectorAll("input")) i.checked = true;
+      angebotAnzahl = SCHRITT; angeboteListe();
+      $("angebot-suche").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    });
+    return el("li", { class: "idee" },
+      el("span", { class: "i-zutat", text: zutat }),
+      el("span", { class: "i-klein", text: `${KETTE[a.kette].name}: ${a.name}${menge}` }),
+      preis,
+      el("div", { class: "i-links" },
+        el("a", { href: `https://www.chefkoch.de/rs/s0/${encodeURIComponent(zutat)}/Rezepte.html`, target: "_blank", rel: "noopener", text: "Rezepte dazu", "aria-label": `Rezepte dazu: ${zutat} (öffnet Chefkoch)` }),
+        zeigen));
+  }));
+  const rest = ideen.length - IDEEN_ZUERST;
+  $("kochideen-mehr").hidden = alleIdeen || rest <= 0;
+  $("kochideen-mehr").textContent = `Alle ${ideen.length} Kochideen zeigen`;
+  $("kochideen-mehr").onclick = () => { alleIdeen = true; kochideenZeigen(ids); };
+}
+
 function angeboteZeigen(idsImUmkreis) {
   const d = angebotDaten, sek = $("angebote");
   if (!d) { sek.hidden = true; return; }
@@ -538,6 +599,8 @@ function angeboteZeigen(idsImUmkreis) {
   $("angebot-liste").hidden = !mit.length;
   if (!mit.length) $("mehr-zeigen").hidden = true;
   angebotAnzahl = SCHRITT;
+  alleIdeen = false;
+  kochideenZeigen(mit);
   if (mit.length) angeboteListe();
   else $("angebote-meta").textContent = "";
   sek.hidden = false;
