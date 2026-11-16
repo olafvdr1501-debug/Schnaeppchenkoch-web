@@ -501,8 +501,20 @@ let regionen = new Map();    // Angebotssätze einzelner Kaufleute, die für Mä
 const domainVon = (u) => { const m = /^(?:https?:\/\/)?(?:www\.)?([^\/?#:]+)/i.exec(u || ""); return m ? m[1].toLowerCase() : ""; };
 // Straßenname ohne Hausnummer, vereinheitlicht: „Urbacher Straße 35“ und „Urbacher Str. 35a“ → „urbacherstr“
 const strassenname = (s) => (s || "").toLocaleLowerCase("de").replace(/\d.*$/, "").replace(/stra(ß|ss)e|str\./g, "str").replace(/[^a-zäöüß]/g, "");
-// Bundesweite Angebote sieht jeder; Angebote eines Kaufmanns nur, wer einen seiner Märkte im Umkreis hat.
-const sichtbar = (a) => !a.region || a.region === "bundesweit" || regionen.has(a.region);
+// Bundesweite Angebote sieht jeder; Angebote eines Kaufmanns oder einer Region nur, wer dort einen Markt im Umkreis hat.
+// Dasselbe Angebot kann über zwei Wege kommen (Kaufmann und Region) – dann nur einmal zeigen.
+let doppelt = new Set();
+const sichtbarRoh = (a) => !a.region || a.region === "bundesweit" || regionen.has(a.region);
+const sichtbar = (a) => sichtbarRoh(a) && !doppelt.has(a);
+function doppelteFinden() {
+  const gesehen = new Set();
+  doppelt = new Set();
+  for (const a of angebotDaten ? angebotDaten.liste : []) {
+    if (!sichtbarRoh(a)) continue;
+    const k = [a.kette, a.produkt, a.preis, a.menge].join("|");
+    if (gesehen.has(k)) doppelt.add(a); else gesehen.add(k);
+  }
+}
 
 function regionenFinden(liste) {
   const gefunden = new Map(), d = angebotDaten;
@@ -669,7 +681,7 @@ function angeboteZeigen(idsImUmkreis) {
   // Bundesweite EDEKA-/REWE-Angebote: aus Handzetteln einzelner Kaufleute, in zwei Regionen bzw. per Seitencode belegt
   const KAUFLEUTE_KETTEN = new Set(["edeka", "rewe"]);
   const bundesweitKetten = mit.filter((id) => KAUFLEUTE_KETTEN.has(id) && d.liste.some((a) => a.kette === id && a.region === "bundesweit"));
-  if (bundesweitKetten.length) hinweise.push(`${bundesweitKetten.map((id) => KETTE[id].name).join(" und ")}: bundesweite Angebote, gelesen in den Handzetteln einzelner Kaufleute (REWE: Seiten mit nationalem Code; EDEKA: in Nord- und Süddeutschland mit gleichem Preis gefunden). Einzelne Märkte können abweichen; regionale Angebote deines Markts fehlen hier noch.`);
+  if (bundesweitKetten.length) hinweise.push(`${bundesweitKetten.map((id) => KETTE[id].name).join(" und ")}: bundesweite Angebote, gelesen in den Handzetteln einzelner Kaufleute (REWE: Seiten mit nationalem Code; EDEKA: in Nord- und Süddeutschland mit gleichem Preis gefunden). Einzelne Märkte können abweichen; nicht jedes regionale Angebot ist schon dabei.`);
   $("angebote-fehlen").textContent = hinweise.join(" ");
   $("angebote-fehlen").hidden = !hinweise.length;
   sek.querySelector(".filter").hidden = !mit.length;
@@ -960,6 +972,7 @@ async function suchen() {
     const stand = meta?.erstellt ? new Date(meta.erstellt + "T12:00:00Z").toLocaleDateString("de-DE") : "";
     const liste = auswerten(p, eintraege, radiusKm);
     regionen = regionenFinden(liste);
+    doppelteFinden();
     zeigen(plz, p, radiusKm, liste, stand);
     angeboteZeigen(liste.map((g) => g.kette.id));
     planStarten(liste.map((g) => g.kette.id), plz, radiusKm);
