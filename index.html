@@ -167,6 +167,34 @@ li.idee { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px
 .i-preis .spar { font-size: 13px; font-weight: 600; color: var(--leaf); white-space: nowrap; }
 .i-links { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 4px; font-size: 15px; }
 .i-links a, .i-links button { font: inherit; font-weight: 600; color: var(--leaf); background: none; border: 0; padding: 4px 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+#wochenplan { display: grid; gap: 12px; scroll-margin-top: 12px; }
+#wochenplan[hidden] { display: none; }
+.plan-wahl { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: end; }
+.plan-wahl label { display: grid; gap: 4px; font-size: 14px; font-weight: 600; color: var(--muted); }
+.plan-wahl select { font: inherit; font-size: 16px; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-height: 44px; }
+.mahlzeit { display: grid; gap: 8px; }
+.mahlzeit h3, .einkauf h3 { font-family: var(--font-display); font-weight: 600; font-size: 19px; margin: 6px 0 0; }
+ol.gerichte { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+li.gericht { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; display: grid; gap: 4px; }
+.g-kopf { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: start; }
+.g-titel { font-weight: 600; line-height: 1.3; color: var(--ink); text-underline-offset: 3px; overflow-wrap: anywhere; }
+.g-tag { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.g-info { font-size: 14px; color: var(--muted); }
+.g-angebot { font-size: 14px; color: var(--leaf); font-weight: 600; overflow-wrap: anywhere; }
+.g-angebot.keins { color: var(--muted); font-weight: 400; }
+button.tauschen, button.nehmen { font: inherit; font-size: 15px; font-weight: 600; color: var(--leaf); background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; min-height: 40px; cursor: pointer; white-space: nowrap; }
+.tausch { border-top: 1px dashed var(--line); margin-top: 6px; padding-top: 8px; display: grid; gap: 8px; }
+.tausch ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.tausch li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: center; background: var(--bg); border-radius: 10px; padding: 8px 10px; }
+.einkauf { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 10px; }
+.einkauf h4 { font-size: 13px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin: 8px 0 0; }
+ul.posten { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+ul.posten li { display: grid; gap: 1px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+ul.posten li:last-child { border-bottom: 0; }
+.p-was { font-weight: 600; overflow-wrap: anywhere; }
+.p-was .p-menge { font-variant-numeric: tabular-nums; }
+.p-fuer { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.p-angebot { font-size: 14px; color: var(--leaf); overflow-wrap: anywhere; }
 button.mehr-zeigen {
   justify-self: center; border: 1px solid var(--line); background: var(--paper); color: var(--ink);
   border-radius: 10px; padding: 9px 16px; font-weight: 600; cursor: pointer;
@@ -224,6 +252,35 @@ footer a { color: inherit; }
       <li class="kette" aria-hidden="true"><span class="k-name">Kette B</span><span class="k-adresse">Beispielweg 7, Musterstadt · 1 Filiale im Umkreis</span><span class="preisschild">3,1 km</span><span class="k-links"><span>Angebote von Kette B</span><span>Auf der Karte</span></span></li>
     </ul>
     <p class="fehlt">Gib oben deine Postleitzahl ein. Du siehst dann je Supermarkt-Kette die nächste Filiale, wie weit sie entfernt ist und einen Link zu ihren aktuellen Angeboten.</p>
+  </section>
+
+  <section id="wochenplan" aria-labelledby="plan-titel" hidden>
+    <div class="kopf">
+      <h2 id="plan-titel">Dein Wochenplan aus den Angeboten</h2>
+      <span class="meta" id="plan-meta"></span>
+    </div>
+    <div class="filter plan-wahl" id="plan-wahl">
+      <label>Personen
+        <select id="plan-personen"><option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option></select>
+      </label>
+      <label>Frühstück
+        <select id="plan-fruehstueck"><option value="0" selected>aus</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select>
+      </label>
+      <label>Mittag
+        <select id="plan-mittag"><option value="0">aus</option><option>3</option><option>4</option><option selected>5</option><option>6</option><option>7</option></select>
+      </label>
+      <label>Abendbrot
+        <select id="plan-abendbrot"><option value="0">aus</option><option selected>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select>
+      </label>
+    </div>
+    <p class="leise">Mahlzeiten pro Woche. Gerichte mit vielen Zutaten aus den Angeboten in deinem Umkreis kommen zuerst. Passt dir ein Gericht nicht, tausche es – die Einkaufsliste rechnet sich neu.</p>
+    <div id="plan-gerichte"></div>
+    <div class="einkauf" id="einkauf">
+      <h3>Einkaufsliste</h3>
+      <p class="leise" id="einkauf-meta"></p>
+      <div id="einkauf-liste"></div>
+    </div>
+    <p class="leise">Rezepte von Chefkoch mit mindestens 4,0 Sternen und 20 Bewertungen – Zubereitung und Fotos auf der Rezeptseite. Mengen auf deine Personenzahl umgerechnet. Angebotspreise gelten je Packung; maßgeblich ist der Preis im Markt.</p>
   </section>
 
   <section id="angebote" aria-labelledby="angebote-titel" hidden>
@@ -620,6 +677,248 @@ for (const [id, ev] of [["angebot-suche", "input"], ["angebot-ketten", "change"]
 }
 $("mehr-zeigen").addEventListener("click", () => { angebotAnzahl += SCHRITT; angeboteListe(); });
 
+// ---------- Wochenplan aus den Angeboten (Etappe 3) ----------
+// Rezepte: data/angebote/rezepte.json (privates Projekt, tools/angebote/rezepte_fuer_web.py). Fehlt die Datei, bleibt der Plan aus.
+const MAHLZEITEN = [["fruehstueck", "Frühstück"], ["mittag", "Mittag"], ["abendbrot", "Abendbrot"]];
+const LAUFWEG = ["Obst & Gemüse", "Brot & Backwaren", "Kühlregal", "Fleisch & Fisch", "Nudeln, Reis & Konserven",
+  "Frühstück & Aufstriche", "Gewürze, Öl & Backzutaten", "Süßes & Knabbern", "Getränke", "Tiefkühl"];
+const TAUSCH_ZAHL = 4;
+const GRUNDZUTATEN = new Set(["Zwiebeln", "Zitronen", "Kartoffeln", "Möhren"]);   // fast immer da, zählen beim Bewerten wenig
+let rezeptDaten;          // undefined = noch nicht geladen, null = keine Rezeptdatei
+let planIds = null;       // {fruehstueck: [id, …], mittag: […], abendbrot: […]}
+let planSchluessel = "";
+let tausch = null;        // offenes Tauschfeld: {m, i, seite}
+let planKetten = [];
+
+async function ladeRezepte() {
+  if (rezeptDaten !== undefined) return rezeptDaten;
+  let d = null;
+  try { d = await ladeJson("angebote/rezepte.json"); } catch { d = null; }
+  if (!d) return (rezeptDaten = null);
+  const liste = d.rezepte.map((r) => ({ ...r, zutaten: r.zutaten.map((z) => Object.fromEntries(d.zutat_felder.map((f, i) => [f, z[i]]))) }));
+  return (rezeptDaten = { ...d, liste, nachId: new Map(liste.map((r) => [r.id, r])) });
+}
+
+const zahlText = (x) => x.toLocaleString("de-DE", { maximumFractionDigits: 2 });
+const planWahl = () => ({ personen: +$("plan-personen").value,
+  tage: Object.fromEntries(MAHLZEITEN.map(([m]) => [m, +$("plan-" + m).value])) });
+
+// Je Kochzutat das beste Angebot im Umkreis (echte Ersparnis zuerst, dann der niedrigste Preis)
+function angeboteJeZutat() {
+  const beste = new Map();
+  for (const a of angebotDaten.liste) {
+    if (!a.zutat || !planKetten.includes(a.kette) || !sichtbar(a)) continue;
+    const alt = beste.get(a.zutat);
+    if (!alt || a.prozent > alt.prozent || (a.prozent === alt.prozent && a.preis < alt.preis)) beste.set(a.zutat, a);
+  }
+  return beste;
+}
+
+// Wie gut passt ein Rezept zu den Angeboten? Zuerst die Zahl der Hauptzutaten im Angebot, dann ihr Anteil,
+// die echte Ersparnis und zuletzt Bewertung und Beliebtheit.
+function bewerten(r, angebote) {
+  const haupt = [...new Set(r.zutaten.filter((z) => z.zutat && !z.vorrat && !z.optional).map((z) => z.zutat))];
+  const treffer = haupt.filter((z) => angebote.has(z));
+  const anteil = haupt.length ? treffer.length / haupt.length : 0;
+  const spar = treffer.reduce((s, z) => s + angebote.get(z).prozent, 0);
+  const fleisch = r.zutaten.find((z) => z.zutat && treffer.includes(z.zutat) && z.abteilung === "Fleisch & Fisch");
+  // Gewicht: Fleisch/Fisch zählt am meisten, Gemüse/Obst mittel, Grundzutaten (Zwiebeln, Butter, Sahne …) wenig
+  const abtVon = new Map(r.zutaten.filter((z) => z.zutat).map((z) => [z.zutat, z.abteilung]));
+  const gewicht = treffer.reduce((s, z) => s + (abtVon.get(z) === "Fleisch & Fisch" ? 3
+    : abtVon.get(z) === "Obst & Gemüse" && !GRUNDZUTATEN.has(z) ? 2 : 1), 0);
+  return { treffer, wert: gewicht * 6 + anteil * 6 + spar * 5 + (r.sterne - 4) * 4 + Math.log10(r.bewertungen),
+           hauptsache: fleisch ? fleisch.zutat : null };
+}
+
+function kandidaten(m, angebote) {
+  return rezeptDaten.liste.filter((r) => r.mahlzeiten.includes(m))
+    .map((r) => ({ r, b: bewerten(r, angebote) }))
+    .sort((x, y) => y.b.wert - x.b.wert || y.r.bewertungen - x.r.bewertungen);
+}
+
+// Plan: je Mahlzeit die besten Rezepte; kein Rezept doppelt, dasselbe Fleisch oder derselbe Fisch höchstens zweimal.
+function planBauen(wahl, angebote) {
+  const plan = {}, benutzt = new Set(), haupt = new Map();
+  for (const [m] of MAHLZEITEN) {
+    plan[m] = [];
+    if (!wahl.tage[m]) continue;
+    const kand = kandidaten(m, angebote);
+    for (const streng of [true, false]) {
+      for (const { r, b } of kand) {
+        if (plan[m].length >= wahl.tage[m]) break;
+        if (benutzt.has(r.id) || (streng && b.hauptsache && (haupt.get(b.hauptsache) || 0) >= 2)) continue;
+        plan[m].push(r.id); benutzt.add(r.id);
+        if (b.hauptsache) haupt.set(b.hauptsache, (haupt.get(b.hauptsache) || 0) + 1);
+      }
+    }
+  }
+  return plan;
+}
+
+function angebotHinweis(treffer, angebote) {
+  if (!treffer.length) return el("span", { class: "g-angebot keins", text: "Keine Hauptzutat diese Woche im Angebot" });
+  const ketten = [...new Set(treffer.map((z) => KETTE[angebote.get(z).kette].name))];
+  return el("span", { class: "g-angebot", text: `Im Angebot: ${treffer.join(", ")} (${ketten.join(", ")})` });
+}
+
+function gerichtInfo(r) {
+  const teile = [`★ ${zahlText(Math.round(r.sterne * 10) / 10)} (${r.bewertungen.toLocaleString("de-DE")} Bewertungen)`];
+  if (r.zeit) teile.push(`${r.zeit} Min.`);
+  return el("span", { class: "g-info", text: teile.join(" · ") });
+}
+
+function rezeptLink(r, klasse) {
+  return el("a", { class: klasse, href: r.url, target: "_blank", rel: "noopener", text: r.titel });
+}
+
+function planZeigen() {
+  const angebote = angeboteJeZutat(), ziel = $("plan-gerichte"), wahl = planWahl();
+  ziel.replaceChildren();
+  for (const [m, name] of MAHLZEITEN) {
+    const ids = planIds[m] || [];
+    if (!wahl.tage[m]) continue;
+    const ol = el("ol", { class: "gerichte" });
+    ids.forEach((id, i) => {
+      const r = rezeptDaten.nachId.get(id), b = bewerten(r, angebote);
+      const knopf = el("button", { type: "button", class: "tauschen", "aria-expanded": String(!!(tausch && tausch.m === m && tausch.i === i)), text: "Tauschen" });
+      knopf.addEventListener("click", () => { tausch = tausch && tausch.m === m && tausch.i === i ? null : { m, i, seite: 0 }; planZeigen(); });
+      const li = el("li", { class: "gericht" },
+        el("span", { class: "g-tag", text: `${name} ${i + 1}` }),
+        el("div", { class: "g-kopf" }, rezeptLink(r, "g-titel"), knopf),
+        gerichtInfo(r), angebotHinweis(b.treffer, angebote));
+      if (tausch && tausch.m === m && tausch.i === i) li.append(tauschFeld(m, i, angebote));
+      ol.append(li);
+    });
+    const fehlen = wahl.tage[m] - ids.length;
+    const kopf = el("h3", { text: `${name} · ${ids.length}× pro Woche` });
+    const block = el("div", { class: "mahlzeit" }, kopf, ol);
+    if (fehlen > 0) block.append(el("p", { class: "leise", text: `Für ${fehlen} weitere ${name}-Mahlzeit(en) haben wir diese Woche noch kein passendes Rezept.` }));
+    ziel.append(block);
+  }
+  einkaufZeigen(angebote);
+}
+
+function tauschFeld(m, i, angebote) {
+  const imPlan = new Set(Object.values(planIds).flat());
+  const alle = kandidaten(m, angebote).filter((k) => !imPlan.has(k.r.id));
+  const start = tausch.seite * TAUSCH_ZAHL, auswahl = alle.slice(start, start + TAUSCH_ZAHL);
+  const ul = el("ul");
+  for (const { r, b } of auswahl) {
+    const nehmen = el("button", { type: "button", class: "nehmen", text: "Nehmen" });
+    nehmen.addEventListener("click", () => {
+      planIds[m][i] = r.id; tausch = null;
+      speicherSchreiben(planSchluessel, { wahl: planWahl(), plan: planIds });
+      planZeigen();
+    });
+    ul.append(el("li", {}, el("div", { class: "a-text" }, rezeptLink(r, "g-titel"), gerichtInfo(r), angebotHinweis(b.treffer, angebote)), nehmen));
+  }
+  const feld = el("div", { class: "tausch" }, el("span", { class: "g-tag", text: "Stattdessen" }), ul);
+  if (!auswahl.length) feld.append(el("p", { class: "leise", text: "Keine weiteren Rezepte für diese Mahlzeit." }));
+  if (alle.length > start + TAUSCH_ZAHL) {
+    const weiter = el("button", { type: "button", class: "tauschen", text: "Andere Vorschläge" });
+    weiter.addEventListener("click", () => { tausch.seite++; planZeigen(); });
+    feld.append(weiter);
+  } else if (tausch.seite > 0) {
+    const vorn = el("button", { type: "button", class: "tauschen", text: "Wieder von vorn" });
+    vorn.addEventListener("click", () => { tausch.seite = 0; planZeigen(); });
+    feld.append(vorn);
+  }
+  return feld;
+}
+
+// Einkaufsliste: Zutaten aller Gerichte, auf die Personenzahl umgerechnet und zusammengezählt
+const BASIS = { kg: ["g", 1000], l: ["ml", 1000], cl: ["ml", 10], dl: ["ml", 100] };
+function mengeText(einheit, x) {
+  if (einheit === "g" || einheit === "ml") {
+    if (x >= 1000) return `${zahlText(Math.round(x / 100) / 10)} ${einheit === "g" ? "kg" : "l"}`;
+    const schritt = x >= 100 ? 10 : 5;
+    return `${zahlText(Math.max(schritt, Math.round(x / schritt) * schritt))} ${einheit}`;
+  }
+  const halb = Math.max(0.5, Math.ceil(x * 2 - 1e-9) / 2);   // Stück, EL, Dosen …: auf halbe aufrunden
+  return einheit ? `${zahlText(halb)} ${einheit}` : zahlText(halb);
+}
+
+function einkaufZeigen(angebote) {
+  const wahl = planWahl(), posten = new Map();
+  for (const [m] of MAHLZEITEN) for (const id of planIds[m] || []) {
+    const r = rezeptDaten.nachId.get(id), faktor = wahl.personen / r.portionen;
+    for (const z of r.zutaten) {
+      const schluessel = (z.vorrat ? "v:" : "") + (z.zutat || z.name.toLocaleLowerCase("de"));
+      if (!posten.has(schluessel)) posten.set(schluessel, { name: z.zutat && !z.vorrat ? z.zutat : z.name, zutat: z.vorrat ? null : z.zutat,
+        abteilung: z.vorrat ? "Vorrat" : (z.abteilung || "Sonstiges"), mengen: new Map(), ohne: false, optional: true, rezepte: new Set() });
+      const p = posten.get(schluessel);
+      if (z.menge == null) p.ohne = true;
+      else {
+        const [einheit, mal] = BASIS[z.einheit] || [z.einheit || "", 1];
+        p.mengen.set(einheit, (p.mengen.get(einheit) || 0) + z.menge * mal * faktor);
+      }
+      if (!z.optional) p.optional = false;
+      p.rezepte.add(r.titel);
+    }
+  }
+  const gruppen = [...LAUFWEG.filter((a) => a !== "Gewürze, Öl & Backzutaten"), "Gewürze, Öl & Backzutaten", "Sonstiges", "Vorrat"];
+  const ziel = $("einkauf-liste");
+  ziel.replaceChildren();
+  let imAngebot = 0, gesamt = 0;
+  for (const g of gruppen) {
+    const liste = [...posten.values()].filter((p) => p.abteilung === g).sort((a, b) => a.name.localeCompare(b.name, "de"));
+    if (!liste.length) continue;
+    const ul = el("ul", { class: "posten" });
+    for (const p of liste) {
+      gesamt++;
+      // Mehrere Einheiten (z. B. „1“ und „940 g“): die einheitslose Menge als Stück kennzeichnen
+      const mengen = [...p.mengen].map(([e, x]) => mengeText(e || (p.mengen.size > 1 ? "Stück" : ""), x)).join(" + ");
+      const was = el("span", { class: "p-was" });
+      if (mengen) was.append(el("span", { class: "p-menge", text: mengen + " " }));
+      was.append(document.createTextNode(p.name + (p.optional ? " (nach Belieben)" : !mengen ? " (nach Bedarf)" : "")));
+      const li = el("li", {}, was, el("span", { class: "p-fuer", text: "für " + [...p.rezepte].join(", ") }));
+      const a = p.zutat && angebote.get(p.zutat);
+      if (a) {
+        imAngebot++;
+        const menge = a.menge && a.menge.trim() !== "je" ? ` (${a.menge.replace(/(\d)\.(\d{2})(?!\d)/g, "$1,$2")})` : "";
+        li.append(el("span", { class: "p-angebot", text: `Angebot: ${KETTE[a.kette].name} · ${a.name} · ${(a.ab ? "ab " : "") + euro(a.preis)}${a.ersparnis ? " statt " + euro(a.vergleichspreis) : ""}${menge}` }));
+      }
+      ul.append(li);
+    }
+    ziel.append(el("h4", { text: g === "Vorrat" ? "Vorrat – nur falls leer" : g }), ul);
+  }
+  $("einkauf-meta").textContent = `${gesamt} Posten für ${wahl.personen} ${wahl.personen === 1 ? "Person" : "Personen"} · ${imAngebot} davon im Angebot in deinem Umkreis`;
+}
+
+function planStarten(idsImUmkreis, plz, radiusKm) {
+  const sek = $("wochenplan");
+  if (!rezeptDaten || !angebotDaten) { sek.hidden = true; return; }
+  planKetten = idsImUmkreis;
+  planSchluessel = `plan:${angebotDaten.woche_ab}:${plz}:${radiusKm}`;
+  const gespeichert = speicherLesen(planSchluessel);
+  const einst = speicherLesen("plan-wahl");
+  if (einst) {
+    $("plan-personen").value = String(einst.personen);
+    for (const [m] of MAHLZEITEN) $("plan-" + m).value = String(einst.tage[m] ?? 0);
+  }
+  const wahl = planWahl();
+  const gueltig = gespeichert && JSON.stringify(gespeichert.wahl) === JSON.stringify(wahl) &&
+    Object.values(gespeichert.plan).flat().every((id) => rezeptDaten.nachId.has(id));
+  planIds = gueltig ? gespeichert.plan : planBauen(wahl, angeboteJeZutat());
+  tausch = null;
+  $("plan-meta").textContent = `Woche ab ${fmtTag(angebotDaten.woche_ab)} · ${rezeptDaten.liste.length} Rezepte zur Auswahl`;
+  sek.hidden = false;
+  planZeigen();
+}
+
+for (const id of ["plan-personen", ...MAHLZEITEN.map(([m]) => "plan-" + m)]) {
+  $(id).addEventListener("change", () => {
+    const wahl = planWahl();
+    speicherSchreiben("plan-wahl", wahl);
+    // Nur die Personenzahl geändert: Gerichte bleiben, die Liste rechnet neu. Sonst Plan neu bauen.
+    const alt = speicherLesen(planSchluessel);
+    if (alt && id === "plan-personen") { alt.wahl = wahl; speicherSchreiben(planSchluessel, alt); planZeigen(); return; }
+    planIds = planBauen(wahl, angeboteJeZutat()); tausch = null;
+    speicherSchreiben(planSchluessel, { wahl, plan: planIds });
+    planZeigen();
+  });
+}
+
 async function suchen() {
   const plz = $("plz").value.trim();
   const radiusKm = +$("radius").value;
@@ -634,13 +933,14 @@ async function suchen() {
   $("los").disabled = true;
   try {
     status.textContent = "Märkte werden gesucht …";
-    const [p, meta] = await Promise.all([plzKoordinaten(plz), ladeJson("meta.json").catch(() => null), ladeAngebote()]);
+    const [p, meta] = await Promise.all([plzKoordinaten(plz), ladeJson("meta.json").catch(() => null), ladeAngebote(), ladeRezepte()]);
     const eintraege = await maerkte(p, radiusKm);
     const stand = meta?.erstellt ? new Date(meta.erstellt + "T12:00:00Z").toLocaleDateString("de-DE") : "";
     const liste = auswerten(p, eintraege, radiusKm);
     regionen = regionenFinden(liste);
     zeigen(plz, p, radiusKm, liste, stand);
     angeboteZeigen(liste.map((g) => g.kette.id));
+    planStarten(liste.map((g) => g.kette.id), plz, radiusKm);
     status.textContent = "";
     speicherSchreiben("letzte", { plz, radiusKm });
   } catch (e) {
