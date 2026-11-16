@@ -834,8 +834,9 @@ function mengeText(einheit, x) {
     const schritt = x >= 100 ? 10 : 5;
     return `${zahlText(Math.max(schritt, Math.round(x / schritt) * schritt))} ${einheit}`;
   }
-  const halb = Math.max(0.5, Math.ceil(x * 2 - 1e-9) / 2);   // Stück, EL, Dosen …: auf halbe aufrunden
-  return einheit ? `${zahlText(halb)} ${einheit}` : zahlText(halb);
+  if (!einheit || einheit === "Stück") return `${Math.max(1, Math.ceil(x - 1e-9))}${einheit ? " Stück" : ""}`;   // ganze Stück kaufen
+  const halb = Math.max(0.5, Math.ceil(x * 2 - 1e-9) / 2);   // EL, Dosen, Bund …: auf halbe aufrunden
+  return `${zahlText(halb)} ${einheit}`;
 }
 
 function einkaufZeigen(angebote) {
@@ -843,7 +844,8 @@ function einkaufZeigen(angebote) {
   for (const [m] of MAHLZEITEN) for (const id of planIds[m] || []) {
     const r = rezeptDaten.nachId.get(id), faktor = wahl.personen / r.portionen;
     for (const z of r.zutaten) {
-      const schluessel = (z.vorrat ? "v:" : "") + (z.zutat || z.name.toLocaleLowerCase("de"));
+      // Einzahl und Mehrzahl zusammen: „Gewürzgurke“ und „Gewürzgurken“
+      const schluessel = (z.vorrat ? "v:" : "") + (z.zutat || z.name.toLocaleLowerCase("de").replace(/(?:en|n|e|s)$/, ""));
       if (!posten.has(schluessel)) posten.set(schluessel, { name: z.zutat && !z.vorrat ? z.zutat : z.name, zutat: z.vorrat ? null : z.zutat,
         abteilung: z.vorrat ? "Vorrat" : (z.abteilung || "Sonstiges"), mengen: new Map(), ohne: false, optional: true, rezepte: new Set() });
       const p = posten.get(schluessel);
