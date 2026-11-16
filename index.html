@@ -662,7 +662,7 @@ function angeboteZeigen(idsImUmkreis) {
   // Bundesweite EDEKA-/REWE-Angebote: aus Handzetteln einzelner Kaufleute, in zwei Regionen bzw. per Seitencode belegt
   const KAUFLEUTE_KETTEN = new Set(["edeka", "rewe"]);
   const bundesweitKetten = mit.filter((id) => KAUFLEUTE_KETTEN.has(id) && d.liste.some((a) => a.kette === id && a.region === "bundesweit"));
-  if (bundesweitKetten.length) hinweise.push(`${bundesweitKetten.map((id) => KETTE[id].name).join(" und ")}: bundesweite Angebote aus den Handzetteln einzelner Kaufleute – sie gelten in den meisten Märkten, einzelne Märkte können abweichen. Regionale Angebote deines Markts fehlen hier noch.`);
+  if (bundesweitKetten.length) hinweise.push(`${bundesweitKetten.map((id) => KETTE[id].name).join(" und ")}: bundesweite Angebote, gelesen in den Handzetteln einzelner Kaufleute (REWE: Seiten mit nationalem Code; EDEKA: in Nord- und Süddeutschland mit gleichem Preis gefunden). Einzelne Märkte können abweichen; regionale Angebote deines Markts fehlen hier noch.`);
   $("angebote-fehlen").textContent = hinweise.join(" ");
   $("angebote-fehlen").hidden = !hinweise.length;
   sek.querySelector(".filter").hidden = !mit.length;
