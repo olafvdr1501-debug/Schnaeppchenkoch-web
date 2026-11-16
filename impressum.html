@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Impressum und Datenschutz – Schnäppchenkoch</title>
+<meta name="robots" content="noindex">
+<style>
+@font-face { font-family: "Inter"; font-style: normal; font-display: swap; font-weight: 100 900;
+  src: url(fonts/inter-latin-wght-normal.woff2) format("woff2"); }
+@font-face { font-family: "Bricolage Grotesque"; font-style: normal; font-display: swap; font-weight: 200 800;
+  src: url(fonts/bricolage-grotesque-latin-opsz-normal.woff2) format("woff2"); }
+/* Layout: eine ruhige Spalte – Suchleiste oben, darunter je Kette ein „Preisschild“ mit der nächsten Filiale. */
+:root {
+  --bg: #f4f6f1;          /* helles Blattgrün-Grau */
+  --paper: #ffffff;
+  --ink: #18231c;
+  --muted: #5d6b61;
+  --line: #dde4da;
+  --leaf: #1f6b45;        /* Hauptfarbe: Gemüseabteilung */
+  --leaf-soft: #e3efe6;
+  --tag: #ffd84d;         /* Preisschild-Gelb */
+  --tag-ink: #2a2200;
+  --warn: #9a4b00;
+  --warn-soft: #fff1df;
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --radius: 14px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111713; --paper: #18211b; --ink: #e8efe9; --muted: #9fb0a4; --line: #2a372e;
+    --leaf: #6fd09a; --leaf-soft: #1d3326; --tag: #ffd84d; --tag-ink: #2a2200;
+    --warn: #ffb870; --warn-soft: #33240f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111713; --paper: #18211b; --ink: #e8efe9; --muted: #9fb0a4; --line: #2a372e;
+  --leaf: #6fd09a; --leaf-soft: #1d3326; --tag: #ffd84d; --tag-ink: #2a2200;
+  --warn: #ffb870; --warn-soft: #33240f; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 var(--font-body);
+  padding-block: max(20px, env(safe-area-inset-top, 0px)) max(32px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 680px; margin: 0 auto; display: grid; gap: 18px; }
+.brand { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; }
+.brand span { font-family: var(--font-display); font-weight: 800; font-size: 24px; letter-spacing: -0.02em; }
+h1 { font-family: var(--font-display); font-weight: 800; letter-spacing: -0.02em; font-size: clamp(28px, 6vw, 38px); line-height: 1.1; margin: 8px 0 0; }
+h2 { font-family: var(--font-display); font-weight: 600; font-size: 21px; margin: 0 0 6px; }
+section { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; }
+p, address { margin: 0 0 10px; font-style: normal; overflow-wrap: anywhere; }
+p:last-child, address:last-child { margin-bottom: 0; }
+a { color: var(--leaf); text-underline-offset: 3px; }
+.zurueck { font-weight: 600; }
+.klein { color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="brand" href="./">
+    <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">
+        <rect x="4" y="16" width="32" height="18" rx="5" fill="var(--leaf)"/>
+        <rect x="9" y="8" width="22" height="10" rx="5" fill="var(--leaf)"/>
+        <path d="M26 21h8l-4 4z" fill="var(--tag)"/>
+        <circle cx="14" cy="25" r="2.2" fill="var(--paper)"/>
+      </svg>
+    <span>Schnäppchenkoch</span>
+  </a>
+  <h1>Impressum und Datenschutz</h1>
+
+  <section>
+    <h2>Impressum</h2>
+    <p>Angaben gemäß § 5 DDG</p>
+    <address>
+      [Vorname Nachname]<br>
+      [Straße Hausnummer]<br>
+      [PLZ Ort]
+    </address>
+    <p>E-Mail: [E-Mail-Adresse]<br>
+       Telefon: [Telefonnummer]</p>
+    <p>Schnäppchenkoch ist ein privates Projekt in der Testphase. Es wird nichts verkauft, und es gibt keine Werbung.</p>
+  </section>
+
+  <section>
+    <h2>Woher die Daten stammen</h2>
+    <p>Die Standorte der Supermärkte stammen von den <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap-Mitwirkenden</a> (Open Database License) und werden einmal pro Woche aufbereitet. Sie können unvollständig oder veraltet sein.</p>
+    <p>Angebote und Preise stehen auf den Seiten der Supermärkte; Schnäppchenkoch verlinkt dorthin. Für die Inhalte verlinkter Seiten sind deren Betreiber verantwortlich. Markennamen gehören ihren Inhabern und dienen nur der Zuordnung der Märkte.</p>
+  </section>
+
+  <section>
+    <h2>Datenschutz</h2>
+    <p><strong>Verantwortlich</strong> ist die im Impressum genannte Person.</p>
+    <p><strong>Was diese Seite speichert:</strong> nichts über dich. Es gibt kein Konto, keine Cookies, keine Besucherzählung und keine Werbung. Die Suche läuft in deinem Browser mit den Daten dieser Seite.</p>
+    <p><strong>Dein Browser merkt sich</strong> die letzte Suche (Postleitzahl und Umkreis), damit du sie nicht neu eingeben musst. Das bleibt auf deinem Gerät; du kannst es über die Browser-Einstellungen („Websitedaten löschen“) entfernen.</p>
+    <p><strong>Bereitstellung der Seite:</strong> Die Seite liegt bei GitHub Pages (GitHub, Inc., USA). Beim Aufruf verarbeitet GitHub technisch notwendige Daten wie deine IP-Adresse. Näheres in der <a href="https://docs.github.com/de/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noopener">Datenschutzerklärung von GitHub</a>. Rechtsgrundlage ist unser berechtigtes Interesse, die Seite erreichbar zu machen (Art. 6 Abs. 1 Buchst. f DSGVO).</p>
+    <p><strong>Postleitzahl-Suche:</strong> Nur wenn eine Postleitzahl in unseren Daten fehlt, fragt dein Browser sie bei Nominatim ab, dem Suchdienst der OpenStreetMap Foundation. Dabei werden die Postleitzahl und deine IP-Adresse dorthin übertragen (<a href="https://osmfoundation.org/wiki/Privacy_Policy" target="_blank" rel="noopener">Datenschutzhinweise der OpenStreetMap Foundation</a>).</p>
+    <p><strong>Links:</strong> Wenn du einen Link zu einem Supermarkt oder zur Karte anklickst, gelten dort die Regeln des jeweiligen Anbieters.</p>
+    <p><strong>Deine Rechte:</strong> Du kannst Auskunft, Berichtigung, Löschung und Einschränkung der Verarbeitung verlangen und der Verarbeitung widersprechen. Außerdem kannst du dich bei einer Datenschutz-Aufsichtsbehörde beschweren.</p>
+    <p class="klein">Stand: [Datum]</p>
+  </section>
+
+  <p><a class="zurueck" href="./">← Zurück zur Suche</a></p>
+</div>
+</body>
+</html>
