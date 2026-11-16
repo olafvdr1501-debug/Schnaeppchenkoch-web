@@ -328,10 +328,10 @@ async function maerkte(p, radiusKm) {
 
 function auswerten(p, eintraege, radiusKm) {
   const gruppen = new Map();
-  for (const [kid, lat, lon, strasse, ort, web] of eintraege) {
+  for (const [kid, lat, lon, strasse, ort, web, plz] of eintraege) {
     const kette = KETTE[kid];
     if (!kette) continue;
-    const f = { km: km(p, { lat, lon }), lat, lon, strasse, ort, web };
+    const f = { km: km(p, { lat, lon }), lat, lon, strasse, ort, web, plz };
     if (f.km > radiusKm) continue;
     if (!gruppen.has(kid)) gruppen.set(kid, { kette, filialen: [] });
     gruppen.get(kid).filialen.push(f);
@@ -382,12 +382,15 @@ function zeigen(plz, p, radiusKm, liste, stand) {
       el("span", { class: "k-adresse", text: `${adresse(naechste)} · ${g.filialen.length} ${g.filialen.length === 1 ? "Filiale" : "Filialen"} im Umkreis` }),
       el("span", { class: "preisschild", text: fmtKm(naechste.km) }),
       links);
-    const n = angebotDaten?.ketten?.[g.kette.id];
-    if (n) {
-      const lm = angebotDaten.liste.filter((a) => a.kette === g.kette.id && !OHNE_LEBENSMITTEL.has(a.abteilung)).length;
+    const sicht = angebotDaten ? angebotDaten.liste.filter((a) => a.kette === g.kette.id && sichtbar(a)) : [];
+    if (sicht.length) {
+      const lm = sicht.filter((a) => !OHNE_LEBENSMITTEL.has(a.abteilung)).length;
+      // Angebote einzelner Kaufleute gelten nur in deren Märkten – dazuschreiben, für welche.
+      const wo = [...new Set(g.filialen.filter((f) => f.region).map((f) => f.kaufmann || adresse(f)))];
       const b = el("button", { type: "button", text: "anzeigen" });
       b.addEventListener("click", () => nurKette(g.kette.id));
-      li.append(el("p", { class: "k-zahl" }, document.createTextNode(`${lm} Lebensmittel-Angebote ab ${fmtTag(angebotDaten.woche_ab)} · `), b));
+      li.append(el("p", { class: "k-zahl" }, document.createTextNode(
+        `${lm} Lebensmittel-Angebote ab ${fmtTag(angebotDaten.woche_ab)}${wo.length ? " · gilt für " + wo.join(", ") : ""} · `), b));
     }
     if (g.filialen.length > 1) {
       const ol = el("ol");
@@ -417,6 +420,28 @@ const SCHRITT = 40;
 const OHNE_LEBENSMITTEL = new Set(["Drogerie & Haushalt", "Non-Food"]);
 let angebotDaten;            // undefined = noch nicht geladen, null = keine Angebotsdatei
 let angebotAnzahl = SCHRITT;
+let regionen = new Map();    // Angebotssätze einzelner Kaufleute, die für Märkte im Umkreis gelten: Region → Märkte
+
+const domainVon = (u) => { const m = /^(?:https?:\/\/)?(?:www\.)?([^\/?#:]+)/i.exec(u || ""); return m ? m[1].toLowerCase() : ""; };
+// Straßenname ohne Hausnummer, vereinheitlicht: „Urbacher Straße 35“ und „Urbacher Str. 35a“ → „urbacherstr“
+const strassenname = (s) => (s || "").toLocaleLowerCase("de").replace(/\d.*$/, "").replace(/stra(ß|ss)e|str\./g, "str").replace(/[^a-zäöüß]/g, "");
+// Bundesweite Angebote sieht jeder; Angebote eines Kaufmanns nur, wer einen seiner Märkte im Umkreis hat.
+const sichtbar = (a) => !a.region || a.region === "bundesweit" || regionen.has(a.region);
+
+function regionenFinden(liste) {
+  const gefunden = new Map(), d = angebotDaten;
+  if (!d || !d.nachDomain) return gefunden;
+  for (const g of liste) for (const f of g.filialen) {
+    // Adresse zuerst (kennt den Namen des einzelnen Markts), sonst die Domain des Kaufmanns
+    const t = (f.plz && d.nachAdresse.get(f.plz + "|" + strassenname(f.strasse))) || d.nachDomain.get(domainVon(f.web));
+    if (!t || t.kette !== g.kette.id) continue;   // ein Norma in derselben Straße gehört nicht zum Edeka-Kaufmann
+    f.region = t.region;
+    f.kaufmann = t.name;
+    if (!gefunden.has(t.region)) gefunden.set(t.region, []);
+    gefunden.get(t.region).push(f);
+  }
+  return gefunden;
+}
 
 async function ladeAngebote() {
   if (angebotDaten !== undefined) return angebotDaten;
@@ -431,7 +456,19 @@ async function ladeAngebote() {
     a.name = a.marke && !a.produkt.toLocaleLowerCase("de").includes(a.marke.toLocaleLowerCase("de")) ? `${a.marke} ${a.produkt}` : a.produkt;
     a.suchtext = [a.name, a.menge].filter(Boolean).join(" ").toLocaleLowerCase("de");
   }
-  return (angebotDaten = { ...d, liste });
+  // Zuordnung der Kaufleute: über ihre Domain (aus den Kartendaten) oder über PLZ + Straße ihrer Märkte
+  const nachDomain = new Map(), nachAdresse = new Map();
+  const ketteVon = new Map(liste.filter((a) => a.region && a.region !== "bundesweit").map((a) => [a.region, a.kette]));
+  // Marktname nur zeigen, wenn er für sich verständlich ist („EDEKA Klein“, nicht „Dortmund Eichwaldstr“)
+  const klar = (name) => (/edeka|e[- ]?center|marktkauf|rewe|nahkauf/i.test(name || "") ? name.replace(/\s+/g, " ").trim() : null);
+  for (const [region, haendler] of Object.entries(d.haendler || {})) {
+    const kette = ketteVon.get(region);
+    for (const h of haendler) {
+      nachDomain.set(h.domain, { region, kette, name: h.maerkte.length === 1 ? klar(h.maerkte[0][3]) : null });
+      for (const [plz, strasse, , name] of h.maerkte) nachAdresse.set(plz + "|" + strassenname(strasse), { region, kette, name: klar(name) });
+    }
+  }
+  return (angebotDaten = { ...d, liste, nachDomain, nachAdresse });
 }
 
 function angebotLi(a) {
@@ -461,7 +498,7 @@ function angeboteListe() {
   const nurSpar = $("nur-ersparnis").checked;
   const nurLm = $("nur-lebensmittel").checked;
   // Ohne Kettenauswahl filtern, damit die Zahlen an den Ketten-Schaltern zur Suche passen.
-  const passend = d.liste.filter((a) => (!nurSpar || a.ersparnis) && (!nurLm || !OHNE_LEBENSMITTEL.has(a.abteilung)) &&
+  const passend = d.liste.filter((a) => sichtbar(a) && (!nurSpar || a.ersparnis) && (!nurLm || !OHNE_LEBENSMITTEL.has(a.abteilung)) &&
     worte.every((w) => a.suchtext.includes(w)));
   for (const span of $("angebot-ketten").querySelectorAll(".n")) {
     span.textContent = String(passend.filter((a) => a.kette === span.dataset.kette).length);
@@ -481,15 +518,19 @@ function angeboteListe() {
 function angeboteZeigen(idsImUmkreis) {
   const d = angebotDaten, sek = $("angebote");
   if (!d) { sek.hidden = true; return; }
-  const mit = idsImUmkreis.filter((id) => d.ketten[id]);
-  const ohne = idsImUmkreis.filter((id) => !d.ketten[id] && id !== "aldi");
+  const zahl = (id) => d.liste.filter((a) => a.kette === id && sichtbar(a)).length;
+  const mit = idsImUmkreis.filter((id) => zahl(id));
+  const ohne = idsImUmkreis.filter((id) => !zahl(id) && id !== "aldi");
   $("angebote-titel").textContent = `Angebote ab ${fmtTag(d.woche_ab)}`;
   $("angebot-ketten").replaceChildren(...mit.map((id) => el("label", {},
     Object.assign(el("input", { type: "checkbox", value: id }), { checked: true }),
-    document.createTextNode(KETTE[id].name + " "), el("span", { class: "n", "data-kette": id, text: String(d.ketten[id]) }))));
-  $("angebote-fehlen").textContent = ohne.length
-    ? `Noch nicht automatisch dabei: ${ohne.map((id) => KETTE[id].name).join(", ")} – deren Angebote findest du über die Links oben.` : "";
-  $("angebote-fehlen").hidden = !ohne.length;
+    document.createTextNode(KETTE[id].name + " "), el("span", { class: "n", "data-kette": id, text: String(zahl(id)) }))));
+  const hinweise = [];
+  if (ohne.length) hinweise.push(`Noch nicht automatisch dabei: ${ohne.map((id) => KETTE[id].name).join(", ")} – deren Angebote findest du über die Links oben.`);
+  const kaufleute = [...new Set([...regionen.values()].flat().map((f) => f.kaufmann || adresse(f)))];
+  if (kaufleute.length) hinweise.push(`EDEKA-Angebote stammen von der eigenen Seite des Kaufmanns und gelten für: ${kaufleute.join(", ")}. Andere EDEKA-Märkte können abweichen.`);
+  $("angebote-fehlen").textContent = hinweise.join(" ");
+  $("angebote-fehlen").hidden = !hinweise.length;
   sek.querySelector(".filter").hidden = !mit.length;
   $("angebot-liste").hidden = !mit.length;
   if (!mit.length) $("mehr-zeigen").hidden = true;
@@ -531,6 +572,7 @@ async function suchen() {
     const eintraege = await maerkte(p, radiusKm);
     const stand = meta?.erstellt ? new Date(meta.erstellt + "T12:00:00Z").toLocaleDateString("de-DE") : "";
     const liste = auswerten(p, eintraege, radiusKm);
+    regionen = regionenFinden(liste);
     zeigen(plz, p, radiusKm, liste, stand);
     angeboteZeigen(liste.map((g) => g.kette.id));
     status.textContent = "";
