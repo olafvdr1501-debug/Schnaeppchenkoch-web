@@ -510,12 +510,19 @@ function regionenFinden(liste) {
   for (const g of liste) for (const f of g.filialen) {
     // Adresse zuerst (kennt den Namen des einzelnen Markts), sonst die Domain des Kaufmanns
     const t = (f.plz && d.nachAdresse.get(f.plz + "|" + strassenname(f.strasse))) || d.nachDomain.get(domainVon(f.web));
-    if (!t || t.kette !== g.kette.id) continue;   // ein Norma in derselben Straße gehört nicht zum Edeka-Kaufmann
-    f.region = t.region;
-    f.kaufmann = t.name;
-    f.ketteName = g.kette.name;
-    if (!gefunden.has(t.region)) gefunden.set(t.region, []);
-    gefunden.get(t.region).push(f);
+    if (t && t.kette === g.kette.id) {   // ein Norma in derselben Straße gehört nicht zum Edeka-Kaufmann
+      f.region = t.region;
+      f.kaufmann = t.name;
+      f.ketteName = g.kette.name;
+      if (!gefunden.has(t.region)) gefunden.set(t.region, []);
+      gefunden.get(t.region).push(f);
+    }
+    // Regionsangebote (z. B. REWE Region West): Zuordnung über die ersten Ziffern der Postleitzahl des Markts
+    for (const [region, info] of Object.entries(d.plz_regionen || {})) {
+      if (info.kette !== g.kette.id || !f.plz || !info.praefixe.some((p) => f.plz.startsWith(p))) continue;
+      if (!gefunden.has(region)) gefunden.set(region, []);
+      gefunden.get(region).push(f);
+    }
   }
   return gefunden;
 }
@@ -646,10 +653,12 @@ function angeboteZeigen(idsImUmkreis) {
     document.createTextNode(KETTE[id].name + " "), el("span", { class: "n", "data-kette": id, text: String(zahl(id)) }))));
   const hinweise = [];
   if (ohne.length) hinweise.push(`Noch nicht automatisch dabei: ${ohne.map((id) => KETTE[id].name).join(", ")} – deren Angebote findest du über die Links oben.`);
-  const eigene = [...regionen.values()].flat();
+  const plzRegionen = angebotDaten.plz_regionen || {};
+  const eigene = [...regionen].filter(([r]) => !plzRegionen[r]).flatMap(([, fs]) => fs);
   const kaufleute = [...new Set(eigene.map((f) => f.kaufmann || adresse(f)))];
   const namen = [...new Set(eigene.map((f) => f.ketteName))].join(" und ");
   if (kaufleute.length) hinweise.push(`Angebote von ${namen} stammen von der eigenen Seite des Kaufmanns und gelten für: ${kaufleute.join(", ")}. Andere Märkte derselben Kette können abweichen.`);
+  for (const r of [...regionen.keys()].filter((r) => plzRegionen[r])) hinweise.push(`Dazu: ${plzRegionen[r].hinweis}.`);
   // Bundesweite EDEKA-/REWE-Angebote: aus Handzetteln einzelner Kaufleute, in zwei Regionen bzw. per Seitencode belegt
   const KAUFLEUTE_KETTEN = new Set(["edeka", "rewe"]);
   const bundesweitKetten = mit.filter((id) => KAUFLEUTE_KETTEN.has(id) && d.liste.some((a) => a.kette === id && a.region === "bundesweit"));
