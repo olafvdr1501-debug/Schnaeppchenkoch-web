@@ -1,1 +1,3 @@
 data/angebote/
+__pycache__/
+*.pyc
