@@ -4,7 +4,8 @@ Eingabe: ein .osm.pbf (vorher mit osmium tags-filter auf Supermärkte und Postle
 Ausgabe (im Zielordner):
   meta.json                 Stand der Daten, Anzahl Märkte und Postleitzahlen
   plz/<NN>.json             Postleitzahl -> [Breite, Länge, Ort], aufgeteilt nach den ersten zwei Ziffern
-  maerkte/<B>_<L>.json      Märkte der App-Ketten je 1°x1°-Kachel: [kette, Breite, Länge, Straße, Ort, Webseite, PLZ]
+  maerkte/<B>_<L>.json      Märkte der App-Ketten je 1°x1°-Kachel: [kette, Breite, Länge, Straße, Ort, Webseite, PLZ,
+                            Angebotsregion] – Angebotsregion siehe tools/angebotsregionen.py ("" = keine)
   haendlerseiten.json       eigene Webseiten selbstständiger Kaufleute (Edeka, Rewe, Nahkauf, Marktkauf): Domain -> Anzahl Märkte
 
 Daten: © OpenStreetMap-Mitwirkende, Lizenz ODbL (abgeleitete Datenbank, ebenfalls ODbL).
@@ -20,6 +21,8 @@ from pathlib import Path
 
 import osmium
 import shapely.wkb
+
+from angebotsregionen import zuordnen
 
 # Gleiche Regeln wie in index.html (KETTEN). Reihenfolge ist wichtig.
 KETTEN = [
@@ -132,6 +135,8 @@ def main(eingabe: str, ziel: str) -> None:
         gesehen.add(schluessel)
         maerkte.append(m)
 
+    regionen = zuordnen(maerkte)
+
     for alt in list(ziel.glob("maerkte/*.json")) + list(ziel.glob("plz/*.json")):
         alt.unlink()
     (ziel / "maerkte").mkdir(parents=True, exist_ok=True)
@@ -169,6 +174,7 @@ def main(eingabe: str, ziel: str) -> None:
         "kacheln": len(kacheln),
         "je_kette": dict(sorted(je_kette.items())),
         "haendlerseiten": {k: {"domains": len(v), "maerkte": sum(v.values())} for k, v in sorted(haendler.items())},
+        "angebotsregionen": dict(sorted(regionen.items())),
     }
     (ziel / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
     print(json.dumps(meta, ensure_ascii=False, indent=1))

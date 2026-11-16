@@ -36,5 +36,15 @@
    "domains": 81,
    "maerkte": 141
   }
+ },
+ "angebotsregionen": {
+  "edeka-hessenring": 329,
+  "edeka-minden-hannover": 1178,
+  "edeka-nord": 536,
+  "edeka-nst": 499,
+  "edeka-rhein-ruhr": 583,
+  "edeka-suedbayern": 850,
+  "edeka-suedwest": 948,
+  "offen": 327
  }
 }

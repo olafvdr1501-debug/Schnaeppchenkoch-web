@@ -404,10 +404,10 @@ async function maerkte(p, radiusKm) {
 
 function auswerten(p, eintraege, radiusKm) {
   const gruppen = new Map();
-  for (const [kid, lat, lon, strasse, ort, web, plz] of eintraege) {
+  for (const [kid, lat, lon, strasse, ort, web, plz, angebotsregion] of eintraege) {
     const kette = KETTE[kid];
     if (!kette) continue;
-    const f = { km: km(p, { lat, lon }), lat, lon, strasse, ort, web, plz };
+    const f = { km: km(p, { lat, lon }), lat, lon, strasse, ort, web, plz, angebotsregion: angebotsregion || null };
     if (f.km > radiusKm) continue;
     if (!gruppen.has(kid)) gruppen.set(kid, { kette, filialen: [] });
     gruppen.get(kid).filialen.push(f);
@@ -516,6 +516,12 @@ function regionenFinden(liste) {
       f.ketteName = g.kette.name;
       if (!gefunden.has(t.region)) gefunden.set(t.region, []);
       gefunden.get(t.region).push(f);
+    }
+    // Regionsangebote je Markt (z. B. EDEKA Südbayern): Region steht in den Kartendaten (tools/angebotsregionen.py)
+    const mr = f.angebotsregion && (d.markt_regionen || {})[f.angebotsregion];
+    if (mr && mr.kette === g.kette.id) {
+      if (!gefunden.has(f.angebotsregion)) gefunden.set(f.angebotsregion, []);
+      gefunden.get(f.angebotsregion).push(f);
     }
     // Regionsangebote (z. B. REWE Region West): Zuordnung über die ersten Ziffern der Postleitzahl des Markts
     for (const [region, info] of Object.entries(d.plz_regionen || {})) {
@@ -653,7 +659,8 @@ function angeboteZeigen(idsImUmkreis) {
     document.createTextNode(KETTE[id].name + " "), el("span", { class: "n", "data-kette": id, text: String(zahl(id)) }))));
   const hinweise = [];
   if (ohne.length) hinweise.push(`Noch nicht automatisch dabei: ${ohne.map((id) => KETTE[id].name).join(", ")} – deren Angebote findest du über die Links oben.`);
-  const plzRegionen = angebotDaten.plz_regionen || {};
+  // Regionsangebote (über PLZ oder Marktregion zugeordnet) sind keine Angebote einzelner Kaufleute
+  const plzRegionen = { ...(angebotDaten.plz_regionen || {}), ...(angebotDaten.markt_regionen || {}) };
   const eigene = [...regionen].filter(([r]) => !plzRegionen[r]).flatMap(([, fs]) => fs);
   const kaufleute = [...new Set(eigene.map((f) => f.kaufmann || adresse(f)))];
   const namen = [...new Set(eigene.map((f) => f.ketteName))].join(" und ");
