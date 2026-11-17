@@ -192,6 +192,8 @@ button.tauschen, button.nehmen { font: inherit; font-size: 15px; font-weight: 60
 .tausch ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .tausch li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: center; background: var(--bg); border-radius: 10px; padding: 8px 10px; }
 .einkauf { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 10px; }
+.einkauf h4.einkaufstag { font-family: var(--font-display); font-size: 17px; letter-spacing: 0; text-transform: none; color: var(--ink); margin-top: 14px; }
+.einkauf h5 { font-size: 14px; font-weight: 700; color: var(--leaf); margin: 6px 0 0; }
 .einkauf h4 { font-size: 13px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin: 8px 0 0; }
 ul.posten { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 ul.posten li { display: grid; gap: 1px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
@@ -276,6 +278,12 @@ footer a { color: inherit; }
       </label>
       <label>Abendbrot
         <select id="plan-abendbrot"><option value="0">aus</option><option selected>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select>
+      </label>
+      <label>Einkaufen
+        <select id="plan-einkauf"><option value="1" selected>1× pro Woche (Mo)</option><option value="2">2× pro Woche (Mo + Do)</option></select>
+      </label>
+      <label>Märkte je Einkauf
+        <select id="plan-maerkte"><option value="2">höchstens 2</option><option value="3" selected>höchstens 3</option><option value="4">höchstens 4</option><option value="0">egal</option></select>
       </label>
     </div>
     <div class="filter vorlieben" id="vorlieben">
@@ -755,7 +763,22 @@ const planWahl = () => ({ personen: +$("plan-personen").value,
   tage: Object.fromEntries(MAHLZEITEN.map(([m]) => [m, +$("plan-" + m).value])),
   ernaehrung: $("plan-ernaehrung").value,
   ohne: [...$("plan-ohne").querySelectorAll("input:checked")].map((i) => i.value),
-  fleischMax: $("plan-fleischmax").value === "" ? null : +$("plan-fleischmax").value });
+  fleischMax: $("plan-fleischmax").value === "" ? null : +$("plan-fleischmax").value,
+  einkauf: +$("plan-einkauf").value, maerkte: +$("plan-maerkte").value });
+
+// Einkaufstage: Gerichte gleichmäßig über die Woche (Mo = 0 … So = 6). Bei 2× Einkaufen kauft man am Montag für
+// Mo–Mi und am Donnerstag für Do–So; jede Zutat am Einkaufstag vor dem ersten Gericht, das sie braucht. Angebote
+// zählen nur, wenn sie am Einkaufstag gelten (Discounter starten einen Teil erst donnerstags oder freitags).
+const WOCHE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+const kochtag = (i, anzahl) => Math.floor(i * 7 / Math.max(1, anzahl));
+const einkaufstage = (wahl) => (wahl.einkauf === 2 ? [0, 3] : [0]);
+const einkaufFuer = (wahl, tag) => (wahl.einkauf === 2 && tag >= 3 ? 3 : 0);
+function tagDatum(tag) {
+  const d = new Date(angebotDaten.woche_ab + "T12:00:00Z");
+  d.setUTCDate(d.getUTCDate() + tag);
+  return d.toISOString().slice(0, 10);
+}
+const giltAm = (a, datum) => (!a.gueltig_von || a.gueltig_von <= datum) && (!a.gueltig_bis || a.gueltig_bis >= datum);
 
 // Essensvorlieben: Merkmale je Rezept rechnet das private Projekt (tools/angebote/vorlieben.py) aus den Zutaten.
 const OHNE = [["schwein", "Schwein"], ["rind", "Rind"], ["lamm", "Lamm"], ["haehnchen", "Hähnchen"], ["pute", "Pute"],
@@ -772,11 +795,13 @@ function passtZuVorlieben(r, wahl) {
 }
 const istFleischgericht = (r) => (r.merkmale || []).includes("fleischgericht");
 
-// Je Kochzutat das beste Angebot im Umkreis (echte Ersparnis zuerst, dann der niedrigste Preis)
-function angeboteJeZutat() {
-  const beste = new Map();
+// Je Kochzutat das beste Angebot im Umkreis (echte Ersparnis zuerst, dann der niedrigste Preis) – nur Angebote, die an
+// einem der Einkaufstage gelten, auf Wunsch nur aus bestimmten Ketten
+function angeboteJeZutat(tage = einkaufstage(planWahl()), nurKetten = null) {
+  const daten = tage.map(tagDatum), beste = new Map();
   for (const a of angebotDaten.liste) {
-    if (!a.zutat || !planKetten.includes(a.kette) || !sichtbar(a)) continue;
+    if (!a.zutat || !planKetten.includes(a.kette) || !sichtbar(a) || !daten.some((d) => giltAm(a, d))) continue;
+    if (nurKetten && !nurKetten.has(a.kette)) continue;
     const alt = beste.get(a.zutat);
     if (!alt || a.prozent > alt.prozent || (a.prozent === alt.prozent && a.preis < alt.preis)) beste.set(a.zutat, a);
   }
@@ -825,6 +850,14 @@ function planBauen(wahl, angebote) {
       }
     }
   }
+  // Bei 2× Einkaufen: Gerichte mit Angeboten, die erst ab Donnerstag gelten, ans Wochenende (Einkauf Donnerstag),
+  // Gerichte mit Angeboten, die nur bis Mittwoch gelten, an den Wochenanfang
+  if (wahl.einkauf === 2) {
+    const mo = tagDatum(0), dn = tagDatum(3);
+    const spaet = (id) => bewerten(rezeptDaten.nachId.get(id), angebote).treffer
+      .reduce((s, z) => s + (giltAm(angebote.get(z), mo) ? 0 : 1) - (giltAm(angebote.get(z), dn) ? 0 : 1), 0);
+    for (const m in plan) plan[m] = plan[m].map((id) => [id, spaet(id)]).sort((x, y) => x[1] - y[1]).map(([id]) => id);
+  }
   return plan;
 }
 
@@ -856,7 +889,7 @@ function planZeigen() {
       const knopf = el("button", { type: "button", class: "tauschen", "aria-expanded": String(!!(tausch && tausch.m === m && tausch.i === i)), text: "Tauschen" });
       knopf.addEventListener("click", () => { tausch = tausch && tausch.m === m && tausch.i === i ? null : { m, i, seite: 0 }; planZeigen(); });
       const li = el("li", { class: "gericht" },
-        el("span", { class: "g-tag", text: `${name} ${i + 1}` }),
+        el("span", { class: "g-tag", text: `${name} · ${WOCHE[kochtag(i, wahl.tage[m])]}` }),
         el("div", { class: "g-kopf" }, rezeptLink(r, "g-titel"), knopf),
         gerichtInfo(r), angebotHinweis(b.treffer, angebote));
       if (tausch && tausch.m === m && tausch.i === i) li.append(tauschFeld(m, i, angebote));
@@ -868,7 +901,7 @@ function planZeigen() {
     if (fehlen > 0) block.append(el("p", { class: "leise", text: `Für ${fehlen} weitere ${name}-Mahlzeit(en) haben wir diese Woche noch kein passendes Rezept.` }));
     ziel.append(block);
   }
-  einkaufZeigen(angebote);
+  einkaufZeigen();
 }
 
 function tauschFeld(m, i, angebote) {
@@ -915,16 +948,39 @@ function mengeText(einheit, x) {
   return `${zahlText(halb)} ${einheit}`;
 }
 
-function einkaufZeigen(angebote) {
+function postenLi(p, a) {
+  // Mehrere Einheiten (z. B. „1“ und „940 g“): die einheitslose Menge als Stück kennzeichnen
+  const mengen = [...p.mengen].map(([e, x]) => mengeText(e || (p.mengen.size > 1 ? "Stück" : ""), x)).join(" + ");
+  const was = el("span", { class: "p-was" });
+  if (mengen) was.append(el("span", { class: "p-menge", text: mengen + " " }));
+  was.append(document.createTextNode(p.name + (p.optional ? " (nach Belieben)" : !mengen ? " (nach Bedarf)" : "")));
+  const li = el("li", {}, was, el("span", { class: "p-fuer", text: "für " + [...p.rezepte].join(", ") }));
+  if (a) {
+    const menge = a.menge && a.menge.trim() !== "je" ? ` (${a.menge.replace(/(\d)\.(\d{2})(?!\d)/g, "$1,$2")})` : "";
+    li.append(el("span", { class: "p-angebot", text: `Angebot: ${a.name} · ${(a.ab ? "ab " : "") + euro(a.preis)}${a.ersparnis ? ` (${a.bezug} ${euro(a.vergleichspreis)}, −${euro(a.ersparnis)})` : ""}${menge}` }));
+  } else if (p.weggelassen) {
+    const w = p.weggelassen;
+    li.append(el("span", { class: "p-fuer", text: `Im Angebot bei ${KETTE[w.kette].name} (${euro(w.preis)}) – weggelassen, sonst ein Markt mehr` }));
+  }
+  return li;
+}
+
+const laufwegRang = (p) => { const i = LAUFWEG.indexOf(p.abteilung); return i < 0 ? 99 : i; };
+const nachLaufweg = (x, y) => laufwegRang(x) - laufwegRang(y) || x.name.localeCompare(y.name, "de");
+
+function einkaufZeigen() {
   const wahl = planWahl(), posten = new Map();
-  for (const [m] of MAHLZEITEN) for (const id of planIds[m] || []) {
+  for (const [m] of MAHLZEITEN) (planIds[m] || []).forEach((id, i) => {
     const r = rezeptDaten.nachId.get(id), faktor = wahl.personen / r.portionen;
+    const einkauf = einkaufFuer(wahl, kochtag(i, wahl.tage[m]));
     for (const z of r.zutaten) {
       // Einzahl und Mehrzahl zusammen: „Gewürzgurke“ und „Gewürzgurken“
       const schluessel = (z.vorrat ? "v:" : "") + (z.zutat || z.name.toLocaleLowerCase("de").replace(/(?:en|n|e|s)$/, ""));
       if (!posten.has(schluessel)) posten.set(schluessel, { name: z.zutat && !z.vorrat ? z.zutat : z.name, zutat: z.vorrat ? null : z.zutat,
-        abteilung: z.vorrat ? "Vorrat" : (z.abteilung || "Sonstiges"), mengen: new Map(), ohne: false, optional: true, rezepte: new Set() });
+        abteilung: z.vorrat ? "Vorrat" : (z.abteilung || "Sonstiges"), mengen: new Map(), ohne: false, optional: true,
+        rezepte: new Set(), einkauf });
       const p = posten.get(schluessel);
+      p.einkauf = Math.min(p.einkauf, einkauf);           // am Einkaufstag vor dem ersten Gericht mit dieser Zutat
       if (z.menge == null) p.ohne = true;
       else {
         const [einheit, mal] = BASIS[z.einheit] || [z.einheit || "", 1];
@@ -933,34 +989,56 @@ function einkaufZeigen(angebote) {
       if (!z.optional) p.optional = false;
       p.rezepte.add(r.titel);
     }
-  }
-  const gruppen = [...LAUFWEG.filter((a) => a !== "Gewürze, Öl & Backzutaten"), "Gewürze, Öl & Backzutaten", "Sonstiges", "Vorrat"];
+  });
   const ziel = $("einkauf-liste");
   ziel.replaceChildren();
-  let imAngebot = 0, gesamt = 0;
-  for (const g of gruppen) {
-    const liste = [...posten.values()].filter((p) => p.abteilung === g).sort((a, b) => a.name.localeCompare(b.name, "de"));
-    if (!liste.length) continue;
-    const ul = el("ul", { class: "posten" });
-    for (const p of liste) {
-      gesamt++;
-      // Mehrere Einheiten (z. B. „1“ und „940 g“): die einheitslose Menge als Stück kennzeichnen
-      const mengen = [...p.mengen].map(([e, x]) => mengeText(e || (p.mengen.size > 1 ? "Stück" : ""), x)).join(" + ");
-      const was = el("span", { class: "p-was" });
-      if (mengen) was.append(el("span", { class: "p-menge", text: mengen + " " }));
-      was.append(document.createTextNode(p.name + (p.optional ? " (nach Belieben)" : !mengen ? " (nach Bedarf)" : "")));
-      const li = el("li", {}, was, el("span", { class: "p-fuer", text: "für " + [...p.rezepte].join(", ") }));
-      const a = p.zutat && angebote.get(p.zutat);
-      if (a) {
-        imAngebot++;
-        const menge = a.menge && a.menge.trim() !== "je" ? ` (${a.menge.replace(/(\d)\.(\d{2})(?!\d)/g, "$1,$2")})` : "";
-        li.append(el("span", { class: "p-angebot", text: `Angebot: ${KETTE[a.kette].name} · ${a.name} · ${(a.ab ? "ab " : "") + euro(a.preis)}${a.ersparnis ? ` (${a.bezug} ${euro(a.vergleichspreis)}, −${euro(a.ersparnis)})` : ""}${menge}` }));
+  let gesamt = 0, imAngebot = 0, gespart = 0;
+  const alleKetten = new Set(), tage = einkaufstage(wahl);
+  for (const tag of tage) {
+    const liste = [...posten.values()].filter((p) => p.abteilung !== "Vorrat" && p.einkauf === tag);
+    const vorrat = tag === 0 ? [...posten.values()].filter((p) => p.abteilung === "Vorrat") : [];
+    if (!liste.length && !vorrat.length) continue;
+    // 1. Bestes Angebot je Zutat, das an diesem Einkaufstag gilt
+    const angebote = angeboteJeZutat([tag]), gewaehlt = new Map();
+    for (const p of liste) { const a = p.zutat && angebote.get(p.zutat); if (a) gewaehlt.set(p, a); }
+    // 2. Höchstens N Märkte: die mit den meisten genutzten Angeboten (bei Gleichstand mehr Ersparnis). Zutaten aus
+    //    anderen Märkten bekommen das beste Angebot der gewählten Märkte – oder keins.
+    let ketten = [...new Set([...gewaehlt.values()].map((a) => a.kette))];
+    const gewicht = (k) => [...gewaehlt.values()].filter((a) => a.kette === k).reduce((s, a) => s + 1000 + a.ersparnis, 0);
+    ketten.sort((x, y) => gewicht(y) - gewicht(x));
+    if (wahl.maerkte && ketten.length > wahl.maerkte) {
+      const behalten = new Set(ketten.slice(0, wahl.maerkte)), ersatz = angeboteJeZutat([tag], behalten);
+      for (const [p, a] of [...gewaehlt]) {
+        if (behalten.has(a.kette)) continue;
+        const b = ersatz.get(p.zutat);
+        if (b) gewaehlt.set(p, b); else { gewaehlt.delete(p); p.weggelassen = a; }
       }
-      ul.append(li);
+      ketten = ketten.filter((k) => behalten.has(k));
     }
-    ziel.append(el("h4", { text: g === "Vorrat" ? "Vorrat – nur falls leer" : g }), ul);
+    // 3. Anzeige: je Markt die Angebote im Laufweg, dann alles ohne Angebot, dann Vorrat
+    const kopf = tage.length > 1 ? `${tag === 0 ? "Montag" : "Donnerstag"}, ${fmtTag(tagDatum(tag))}` : `Wocheneinkauf ab ${fmtTag(tagDatum(tag))}`;
+    ziel.append(el("h4", { class: "einkaufstag", text: kopf }));
+    for (const k of ketten) {
+      const hier = [...gewaehlt].filter(([, a]) => a.kette === k).sort(([x], [y]) => nachLaufweg(x, y));
+      if (!hier.length) continue;
+      alleKetten.add(k);
+      ziel.append(el("h5", { text: `${KETTE[k].name} · ${hier.length} ${hier.length === 1 ? "Angebot" : "Angebote"}` }),
+        el("ul", { class: "posten" }, ...hier.map(([p, a]) => postenLi(p, a))));
+      imAngebot += hier.length;
+      gespart += hier.reduce((s, [, a]) => s + (a.ersparnis || 0), 0);
+    }
+    const ohne = liste.filter((p) => !gewaehlt.has(p)).sort(nachLaufweg);
+    if (ohne.length) ziel.append(el("h5", { text: ketten.length ? "Ohne Angebot – in einem dieser Märkte" : "Ohne Angebot" }),
+      el("ul", { class: "posten" }, ...ohne.map((p) => postenLi(p, null))));
+    if (vorrat.length) ziel.append(el("h5", { text: "Vorrat – nur falls leer" }),
+      el("ul", { class: "posten" }, ...vorrat.sort(nachLaufweg).map((p) => postenLi(p, null))));
+    gesamt += liste.length + vorrat.length;
   }
-  $("einkauf-meta").textContent = `${gesamt} Posten für ${wahl.personen} ${wahl.personen === 1 ? "Person" : "Personen"} · ${imAngebot} davon im Angebot in deinem Umkreis`;
+  const teile = [`${gesamt} Posten für ${wahl.personen} ${wahl.personen === 1 ? "Person" : "Personen"}`,
+    `${imAngebot} davon im Angebot` + (alleKetten.size ? ` bei ${[...alleKetten].map((k) => KETTE[k].name).join(", ")}` : "")];
+  // Ersparnis rechnet nur gegen Vergleichspreise aus dem Prospekt (statt/UVP), je Angebot eine Packung
+  if (gespart > 0) teile.push(`Ersparnis laut Prospekt mindestens ${euro(Math.round(gespart * 100) / 100)} (je Angebot eine Packung gerechnet)`);
+  $("einkauf-meta").textContent = teile.join(" · ");
 }
 
 function planStarten(idsImUmkreis, plz, radiusKm) {
@@ -976,6 +1054,8 @@ function planStarten(idsImUmkreis, plz, radiusKm) {
     $("plan-ernaehrung").value = einst.ernaehrung || "";
     $("plan-fleischmax").value = einst.fleischMax == null ? "" : String(einst.fleischMax);
     for (const i of $("plan-ohne").querySelectorAll("input")) i.checked = (einst.ohne || []).includes(i.value);
+    $("plan-einkauf").value = String(einst.einkauf || 1);
+    $("plan-maerkte").value = String(einst.maerkte ?? 3);
   }
   const wahl = planWahl();
   const gueltig = gespeichert && JSON.stringify(gespeichert.wahl) === JSON.stringify(wahl) &&
@@ -996,13 +1076,13 @@ function planMeta() {
 $("plan-ohne").append(el("span", { class: "chips-titel", text: "Ohne:" }),
   ...OHNE.map(([wert, name]) => el("label", {}, el("input", { type: "checkbox", value: wert }), document.createTextNode(name))));
 
-for (const id of ["plan-personen", ...MAHLZEITEN.map(([m]) => "plan-" + m), "plan-ernaehrung", "plan-fleischmax", "plan-ohne"]) {
+for (const id of ["plan-personen", ...MAHLZEITEN.map(([m]) => "plan-" + m), "plan-ernaehrung", "plan-fleischmax", "plan-ohne", "plan-einkauf", "plan-maerkte"]) {
   $(id).addEventListener("change", () => {
     const wahl = planWahl();
     speicherSchreiben("plan-wahl", wahl);
     // Nur die Personenzahl geändert: Gerichte bleiben, die Liste rechnet neu. Sonst Plan neu bauen.
     const alt = speicherLesen(planSchluessel);
-    if (alt && id === "plan-personen") { alt.wahl = wahl; speicherSchreiben(planSchluessel, alt); planZeigen(); return; }
+    if (alt && (id === "plan-personen" || id === "plan-maerkte")) { alt.wahl = wahl; speicherSchreiben(planSchluessel, alt); planZeigen(); return; }
     planIds = planBauen(wahl, angeboteJeZutat()); tausch = null;
     speicherSchreiben(planSchluessel, { wahl, plan: planIds });
     planMeta();
