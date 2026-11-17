@@ -153,7 +153,7 @@ li.angebot {
 .a-preis { grid-column: 2; grid-row: 1 / span 4; text-align: right; display: grid; gap: 2px; justify-items: end; }
 .a-preis .preis { font-family: var(--font-display); font-weight: 800; font-size: 22px; line-height: 1.1; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .a-preis .spar { font-size: 13px; font-weight: 600; color: var(--leaf); white-space: nowrap; }
-.a-preis .uvp, .a-preis .app { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.a-preis .app { font-size: 13px; color: var(--muted); white-space: nowrap; }
 .a-text { display: grid; gap: 1px; min-width: 0; }
 .kochideen { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 10px; }
 .kochideen[hidden] { display: none; }
@@ -299,7 +299,7 @@ footer a { color: inherit; }
       <input type="search" id="angebot-suche" placeholder="Was brauchst du? z. B. Butter, Hack, Äpfel" aria-label="Angebote durchsuchen" autocomplete="off">
       <div class="chips" id="angebot-ketten" role="group" aria-label="Ketten"></div>
       <label class="schalter"><input type="checkbox" id="nur-lebensmittel" checked> Nur Lebensmittel (Haushalt, Kleidung, Technik ausblenden)</label>
-      <label class="schalter"><input type="checkbox" id="nur-ersparnis"> Nur mit echter Ersparnis (eigener Streichpreis der Kette)</label>
+      <label class="schalter"><input type="checkbox" id="nur-ersparnis"> Nur mit Ersparnis (Streichpreis der Kette oder UVP)</label>
     </div>
     <p class="leise" id="angebote-fehlen"></p>
     <ul class="angebote" id="angebot-liste"></ul>
@@ -545,6 +545,7 @@ function regionenFinden(liste) {
   return gefunden;
 }
 
+const SPAR_ARTEN = new Set(["statt", "normalpreis", "uvp"]);
 async function ladeAngebote() {
   if (angebotDaten !== undefined) return angebotDaten;
   let d = null;
@@ -552,8 +553,10 @@ async function ladeAngebote() {
   if (!d) return (angebotDaten = null);
   const liste = d.angebote.map((z) => Object.fromEntries(d.felder.map((f, i) => [f, z[i]])));
   for (const a of liste) {
-    // Ersparnis nur gegen den eigenen Streichpreis der Kette – UVP zählt nicht.
-    a.ersparnis = a.vergleich_art === "statt" && a.vergleichspreis > a.preis ? Math.round((a.vergleichspreis - a.preis) * 100) / 100 : 0;
+    // Ersparnis gegen einen Vergleichspreis, den die Kette selbst nennt: eigener Streichpreis oder UVP des Herstellers
+    // (Entscheidung 17.11.). Die UVP wird immer als solche beschriftet.
+    a.ersparnis = SPAR_ARTEN.has(a.vergleich_art) && a.vergleichspreis > a.preis ? Math.round((a.vergleichspreis - a.preis) * 100) / 100 : 0;
+    a.bezug = a.ersparnis ? (a.vergleich_art === "uvp" ? "UVP" : "statt") : "";
     a.prozent = a.ersparnis ? a.ersparnis / a.vergleichspreis : 0;
     a.name = a.marke && !a.produkt.toLocaleLowerCase("de").includes(a.marke.toLocaleLowerCase("de")) ? `${a.marke} ${a.produkt}` : a.produkt;
     a.suchtext = [a.name, a.menge, a.zutat].filter(Boolean).join(" ").toLocaleLowerCase("de");
@@ -579,10 +582,8 @@ function angebotLi(a) {
     .filter(Boolean).join(" · ").replace(/(\d)\.(\d{2})(?!\d)/g, "$1,$2");   // 2.20 → 2,20 (1.000 g bleibt)
   const zeit = a.gueltig_bis && a.gueltig_bis !== a.gueltig_von ? `${fmtTag(a.gueltig_von)} – ${fmtTag(a.gueltig_bis)}` : `ab ${fmtTag(a.gueltig_von)}`;
   const preis = el("div", { class: "a-preis" }, el("span", { class: "preis", text: (a.ab ? "ab " : "") + euro(a.preis) }));
-  if (a.ersparnis) preis.append(el("span", { class: "spar", text: `statt ${euro(a.vergleichspreis)} · −${euro(a.ersparnis)}` }));
-  else if (a.vergleich_art === "uvp" && a.vergleichspreis) {
-    preis.append(el("span", { class: "uvp", title: "Unverbindliche Preisempfehlung des Herstellers – zählt bei uns nicht als Ersparnis", text: `UVP ${euro(a.vergleichspreis)}` }));
-  }
+  if (a.ersparnis) preis.append(el("span", { class: "spar", title: a.bezug === "UVP" ? "Unverbindliche Preisempfehlung des Herstellers, wie im Prospekt genannt" : "Eigener früherer Preis der Kette",
+    text: `${a.bezug} ${euro(a.vergleichspreis)} · −${euro(a.ersparnis)}` }));
   if (a.app_preis && a.app_preis < a.preis) preis.append(el("span", { class: "app", text: `mit App ${euro(a.app_preis)}` }));
   return el("li", { class: "angebot" },
     el("div", { class: "a-text" },
@@ -637,7 +638,7 @@ function kochideenZeigen(ids) {
   $("kochideen-liste").replaceChildren(...ideen.slice(0, alleIdeen ? ideen.length : IDEEN_ZUERST).map(({ zutat, liste, bestes: a }) => {
     const menge = a.menge && a.menge.trim() !== "je" ? " · " + a.menge.replace(/(\d)\.(\d{2})(?!\d)/g, "$1,$2") : "";
     const preis = el("div", { class: "i-preis" }, el("span", { class: "preis", text: (a.ab ? "ab " : "") + euro(a.preis) }));
-    if (a.ersparnis) preis.append(el("span", { class: "spar", text: `statt ${euro(a.vergleichspreis)}` }));
+    if (a.ersparnis) preis.append(el("span", { class: "spar", text: `${a.bezug} ${euro(a.vergleichspreis)}` }));
     const zeigen = el("button", { type: "button", text: liste.length === 1 ? "Angebot zeigen" : `Alle ${liste.length} Angebote` });
     zeigen.addEventListener("click", () => {
       $("angebot-suche").value = zutat;
@@ -694,7 +695,8 @@ function angeboteZeigen(idsImUmkreis) {
   else $("angebote-meta").textContent = "";
   sek.hidden = false;
   $("fuss-angebote").textContent = "Angebote und Preise: von den Seiten der Supermärkte gelesen, maßgeblich ist der Preis im Markt. " +
-    "Ersparnis zeigen wir nur gegenüber dem eigenen Streichpreis der Kette, nicht gegenüber der UVP des Herstellers.";
+    "Ersparnis rechnen wir gegen den Vergleichspreis im Prospekt: „statt“ = eigener früherer Preis der Kette, " +
+    "„UVP“ = unverbindliche Preisempfehlung des Herstellers. Angebote ohne Vergleichspreis zeigen keine Ersparnis.";
 }
 
 function nurKette(id) {
@@ -910,7 +912,7 @@ function einkaufZeigen(angebote) {
       if (a) {
         imAngebot++;
         const menge = a.menge && a.menge.trim() !== "je" ? ` (${a.menge.replace(/(\d)\.(\d{2})(?!\d)/g, "$1,$2")})` : "";
-        li.append(el("span", { class: "p-angebot", text: `Angebot: ${KETTE[a.kette].name} · ${a.name} · ${(a.ab ? "ab " : "") + euro(a.preis)}${a.ersparnis ? " statt " + euro(a.vergleichspreis) : ""}${menge}` }));
+        li.append(el("span", { class: "p-angebot", text: `Angebot: ${KETTE[a.kette].name} · ${a.name} · ${(a.ab ? "ab " : "") + euro(a.preis)}${a.ersparnis ? ` (${a.bezug} ${euro(a.vergleichspreis)}, −${euro(a.ersparnis)})` : ""}${menge}` }));
       }
       ul.append(li);
     }
