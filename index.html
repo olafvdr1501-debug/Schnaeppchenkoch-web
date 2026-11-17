@@ -172,6 +172,8 @@ li.idee { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px
 .i-links a, .i-links button { font: inherit; font-weight: 600; color: var(--leaf); background: none; border: 0; padding: 4px 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 #wochenplan { display: grid; gap: 12px; scroll-margin-top: 12px; }
 #wochenplan[hidden] { display: none; }
+.vorlieben { gap: 12px; }
+.vorlieben .chips-titel { font-size: 14px; font-weight: 600; color: var(--muted); align-self: center; }
 .plan-wahl { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: end; }
 .plan-wahl label { display: grid; gap: 4px; font-size: 14px; font-weight: 600; color: var(--muted); }
 .plan-wahl select { font: inherit; font-size: 16px; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-height: 44px; }
@@ -275,6 +277,17 @@ footer a { color: inherit; }
       <label>Abendbrot
         <select id="plan-abendbrot"><option value="0">aus</option><option selected>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select>
       </label>
+    </div>
+    <div class="filter vorlieben" id="vorlieben">
+      <div class="plan-wahl">
+        <label>Ernährung
+          <select id="plan-ernaehrung"><option value="">alles</option><option value="vegetarisch">vegetarisch</option><option value="vegan">vegan</option></select>
+        </label>
+        <label>Gerichte mit Fleisch oder Fisch
+          <select id="plan-fleischmax"><option value="">so oft es passt</option><option value="0">keine</option><option value="1">höchstens 1 pro Woche</option><option value="2">höchstens 2 pro Woche</option><option value="3">höchstens 3 pro Woche</option><option value="5">höchstens 5 pro Woche</option></select>
+        </label>
+      </div>
+      <div class="chips" id="plan-ohne" role="group" aria-label="Ohne diese Zutaten"></div>
     </div>
     <p class="leise">Mahlzeiten pro Woche. Gerichte mit vielen Zutaten aus den Angeboten in deinem Umkreis kommen zuerst. Passt dir ein Gericht nicht, tausche es – die Einkaufsliste rechnet sich neu.</p>
     <div id="plan-gerichte"></div>
@@ -739,7 +752,25 @@ async function ladeRezepte() {
 
 const zahlText = (x) => x.toLocaleString("de-DE", { maximumFractionDigits: 2 });
 const planWahl = () => ({ personen: +$("plan-personen").value,
-  tage: Object.fromEntries(MAHLZEITEN.map(([m]) => [m, +$("plan-" + m).value])) });
+  tage: Object.fromEntries(MAHLZEITEN.map(([m]) => [m, +$("plan-" + m).value])),
+  ernaehrung: $("plan-ernaehrung").value,
+  ohne: [...$("plan-ohne").querySelectorAll("input:checked")].map((i) => i.value),
+  fleischMax: $("plan-fleischmax").value === "" ? null : +$("plan-fleischmax").value });
+
+// Essensvorlieben: Merkmale je Rezept rechnet das private Projekt (tools/angebote/vorlieben.py) aus den Zutaten.
+const OHNE = [["schwein", "Schwein"], ["rind", "Rind"], ["lamm", "Lamm"], ["haehnchen", "Hähnchen"], ["pute", "Pute"],
+  ["fisch", "Fisch & Meeresfrüchte"], ["wurst", "Wurst, Speck, Schinken"]];
+const NICHT_VEGETARISCH = new Set(["schwein", "rind", "lamm", "haehnchen", "pute", "wild", "fisch", "wurst", "gelatine", "fleisch"]);
+function passtZuVorlieben(r, wahl) {
+  const streng = wahl.ernaehrung || (wahl.ohne || []).length || wahl.fleischMax === 0;
+  if (!r.merkmale) return !streng;                       // ohne Merkmale lässt sich nichts prüfen
+  const m = new Set(r.merkmale);
+  if (wahl.ernaehrung && [...m].some((x) => NICHT_VEGETARISCH.has(x))) return false;
+  if (wahl.ernaehrung === "vegan" && m.has("tierisch")) return false;
+  if (wahl.fleischMax === 0 && m.has("fleischgericht")) return false;
+  return !(wahl.ohne || []).some((x) => m.has(x));
+}
+const istFleischgericht = (r) => (r.merkmale || []).includes("fleischgericht");
 
 // Je Kochzutat das beste Angebot im Umkreis (echte Ersparnis zuerst, dann der niedrigste Preis)
 function angeboteJeZutat() {
@@ -768,24 +799,28 @@ function bewerten(r, angebote) {
            hauptsache: fleisch ? fleisch.zutat : null };
 }
 
-function kandidaten(m, angebote) {
-  return rezeptDaten.liste.filter((r) => r.mahlzeiten.includes(m))
+function kandidaten(m, angebote, wahl = planWahl()) {
+  return rezeptDaten.liste.filter((r) => r.mahlzeiten.includes(m) && passtZuVorlieben(r, wahl))
     .map((r) => ({ r, b: bewerten(r, angebote) }))
     .sort((x, y) => y.b.wert - x.b.wert || y.r.bewertungen - x.r.bewertungen);
 }
 
-// Plan: je Mahlzeit die besten Rezepte; kein Rezept doppelt, dasselbe Fleisch oder derselbe Fisch höchstens zweimal.
+// Plan: je Mahlzeit die besten Rezepte; kein Rezept doppelt, dasselbe Fleisch oder derselbe Fisch höchstens zweimal,
+// Gerichte mit Fleisch oder Fisch höchstens so oft, wie die Vorlieben erlauben.
 function planBauen(wahl, angebote) {
   const plan = {}, benutzt = new Set(), haupt = new Map();
+  let fleisch = 0;
   for (const [m] of MAHLZEITEN) {
     plan[m] = [];
     if (!wahl.tage[m]) continue;
-    const kand = kandidaten(m, angebote);
+    const kand = kandidaten(m, angebote, wahl);
     for (const streng of [true, false]) {
       for (const { r, b } of kand) {
         if (plan[m].length >= wahl.tage[m]) break;
         if (benutzt.has(r.id) || (streng && b.hauptsache && (haupt.get(b.hauptsache) || 0) >= 2)) continue;
+        if (wahl.fleischMax != null && istFleischgericht(r) && fleisch >= wahl.fleischMax) continue;
         plan[m].push(r.id); benutzt.add(r.id);
+        if (istFleischgericht(r)) fleisch++;
         if (b.hauptsache) haupt.set(b.hauptsache, (haupt.get(b.hauptsache) || 0) + 1);
       }
     }
@@ -838,7 +873,10 @@ function planZeigen() {
 
 function tauschFeld(m, i, angebote) {
   const imPlan = new Set(Object.values(planIds).flat());
-  const alle = kandidaten(m, angebote).filter((k) => !imPlan.has(k.r.id));
+  const wahl = planWahl();
+  const fleischSonst = [...imPlan].filter((id) => id !== planIds[m][i] && istFleischgericht(rezeptDaten.nachId.get(id))).length;
+  const alle = kandidaten(m, angebote, wahl).filter((k) => !imPlan.has(k.r.id) &&
+    !(wahl.fleischMax != null && istFleischgericht(k.r) && fleischSonst >= wahl.fleischMax));
   const start = tausch.seite * TAUSCH_ZAHL, auswahl = alle.slice(start, start + TAUSCH_ZAHL);
   const ul = el("ul");
   for (const { r, b } of auswahl) {
@@ -935,18 +973,30 @@ function planStarten(idsImUmkreis, plz, radiusKm) {
   if (einst) {
     $("plan-personen").value = String(einst.personen);
     for (const [m] of MAHLZEITEN) $("plan-" + m).value = String(einst.tage[m] ?? 0);
+    $("plan-ernaehrung").value = einst.ernaehrung || "";
+    $("plan-fleischmax").value = einst.fleischMax == null ? "" : String(einst.fleischMax);
+    for (const i of $("plan-ohne").querySelectorAll("input")) i.checked = (einst.ohne || []).includes(i.value);
   }
   const wahl = planWahl();
   const gueltig = gespeichert && JSON.stringify(gespeichert.wahl) === JSON.stringify(wahl) &&
     Object.values(gespeichert.plan).flat().every((id) => rezeptDaten.nachId.has(id));
   planIds = gueltig ? gespeichert.plan : planBauen(wahl, angeboteJeZutat());
   tausch = null;
-  $("plan-meta").textContent = `Woche ab ${fmtTag(angebotDaten.woche_ab)} · ${rezeptDaten.liste.length} Rezepte zur Auswahl`;
+  planMeta();
   sek.hidden = false;
   planZeigen();
 }
 
-for (const id of ["plan-personen", ...MAHLZEITEN.map(([m]) => "plan-" + m)]) {
+function planMeta() {
+  const wahl = planWahl(), passend = rezeptDaten.liste.filter((r) => passtZuVorlieben(r, wahl)).length;
+  $("plan-meta").textContent = `Woche ab ${fmtTag(angebotDaten.woche_ab)} · ` + (passend === rezeptDaten.liste.length
+    ? `${passend} Rezepte zur Auswahl` : `${passend} von ${rezeptDaten.liste.length} Rezepten passen zu deinen Vorlieben`);
+}
+
+$("plan-ohne").append(el("span", { class: "chips-titel", text: "Ohne:" }),
+  ...OHNE.map(([wert, name]) => el("label", {}, el("input", { type: "checkbox", value: wert }), document.createTextNode(name))));
+
+for (const id of ["plan-personen", ...MAHLZEITEN.map(([m]) => "plan-" + m), "plan-ernaehrung", "plan-fleischmax", "plan-ohne"]) {
   $(id).addEventListener("change", () => {
     const wahl = planWahl();
     speicherSchreiben("plan-wahl", wahl);
@@ -955,6 +1005,7 @@ for (const id of ["plan-personen", ...MAHLZEITEN.map(([m]) => "plan-" + m)]) {
     if (alt && id === "plan-personen") { alt.wahl = wahl; speicherSchreiben(planSchluessel, alt); planZeigen(); return; }
     planIds = planBauen(wahl, angeboteJeZutat()); tausch = null;
     speicherSchreiben(planSchluessel, { wahl, plan: planIds });
+    planMeta();
     planZeigen();
   });
 }
