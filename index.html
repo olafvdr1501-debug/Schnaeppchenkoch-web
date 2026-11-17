@@ -742,7 +742,8 @@ const MAHLZEITEN = [["fruehstueck", "Frühstück"], ["mittag", "Mittag"], ["aben
 const LAUFWEG = ["Obst & Gemüse", "Brot & Backwaren", "Kühlregal", "Fleisch & Fisch", "Nudeln, Reis & Konserven",
   "Frühstück & Aufstriche", "Gewürze, Öl & Backzutaten", "Süßes & Knabbern", "Getränke", "Tiefkühl"];
 const TAUSCH_ZAHL = 4;
-const GRUNDZUTATEN = new Set(["Zwiebeln", "Zitronen", "Kartoffeln", "Möhren"]);   // fast immer da, zählen beim Bewerten wenig
+const GRUNDZUTATEN = new Set(["Zwiebeln", "Rote Zwiebeln", "Zitronen", "Kartoffeln", "Möhren"]);   // fast immer da, zählen beim Bewerten wenig
+const oberbegriff = (z) => (angebotDaten && angebotDaten.oberbegriffe || {})[z] || z;
 let rezeptDaten;          // undefined = noch nicht geladen, null = keine Rezeptdatei
 let planIds = null;       // {fruehstueck: [id, …], mittag: […], abendbrot: […]}
 let planSchluessel = "";
@@ -796,14 +797,17 @@ function passtZuVorlieben(r, wahl) {
 const istFleischgericht = (r) => (r.merkmale || []).includes("fleischgericht");
 
 // Je Kochzutat das beste Angebot im Umkreis (echte Ersparnis zuerst, dann der niedrigste Preis) – nur Angebote, die an
-// einem der Einkaufstage gelten, auf Wunsch nur aus bestimmten Ketten
+// einem der Einkaufstage gelten, auf Wunsch nur aus bestimmten Ketten. Ein Angebot einer Sorte (Spaghetti, rote Paprika)
+// zählt auch für Rezepte, die nur den Oberbegriff verlangen („Nudeln“, „Paprikaschote“) – umgekehrt nie (zutat.py).
 function angeboteJeZutat(tage = einkaufstage(planWahl()), nurKetten = null) {
   const daten = tage.map(tagDatum), beste = new Map();
   for (const a of angebotDaten.liste) {
     if (!a.zutat || !planKetten.includes(a.kette) || !sichtbar(a) || !daten.some((d) => giltAm(a, d))) continue;
     if (nurKetten && !nurKetten.has(a.kette)) continue;
-    const alt = beste.get(a.zutat);
-    if (!alt || a.prozent > alt.prozent || (a.prozent === alt.prozent && a.preis < alt.preis)) beste.set(a.zutat, a);
+    for (const z of new Set([a.zutat, oberbegriff(a.zutat)])) {
+      const alt = beste.get(z);
+      if (!alt || a.prozent > alt.prozent || (a.prozent === alt.prozent && a.preis < alt.preis)) beste.set(z, a);
+    }
   }
   return beste;
 }
@@ -819,7 +823,7 @@ function bewerten(r, angebote) {
   // Gewicht: Fleisch/Fisch zählt am meisten, Gemüse/Obst mittel, Grundzutaten (Zwiebeln, Butter, Sahne …) wenig
   const abtVon = new Map(r.zutaten.filter((z) => z.zutat).map((z) => [z.zutat, z.abteilung]));
   const gewicht = treffer.reduce((s, z) => s + (abtVon.get(z) === "Fleisch & Fisch" ? 3
-    : abtVon.get(z) === "Obst & Gemüse" && !GRUNDZUTATEN.has(z) ? 2 : 1), 0);
+    : abtVon.get(z) === "Obst & Gemüse" && !GRUNDZUTATEN.has(oberbegriff(z)) ? 2 : 1), 0);
   return { treffer, wert: gewicht * 6 + anteil * 6 + spar * 5 + (r.sterne - 4) * 4 + Math.log10(r.bewertungen),
            hauptsache: fleisch ? fleisch.zutat : null };
 }
