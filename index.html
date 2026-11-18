@@ -946,20 +946,52 @@ function kandidaten(m, angebote, wahl = planWahl()) {
 
 // Plan: je Mahlzeit die besten Rezepte; kein Rezept doppelt, dasselbe Fleisch oder derselbe Fisch höchstens zweimal,
 // Gerichte mit Fleisch oder Fisch höchstens so oft, wie die Vorlieben erlauben.
+// Menge einer Zutat im Rezept (für die gewählte Personenzahl) in der Einheit der Angebotspackung – oder null
+function rezeptMenge(r, z, a, wahl) {
+  const faktor = wahl.personen / r.portionen, w = (angebotDaten.stueckgewichte || {})[z] || null;
+  let summe = 0;
+  for (const x of r.zutaten) {
+    if (x.zutat !== z || x.vorrat || x.menge == null) continue;
+    const [e, mal] = BASIS[x.einheit] || [x.einheit || "", 1];
+    const m = x.menge * mal * faktor;
+    if (e === a.inhalt[1] || (e === "" && a.inhalt[1] === "stk")) summe += m;
+    else if ((e === "" || e === "Stück") && a.inhalt[1] === "g" && w) summe += m * w;
+    else if (!KLEINE_EINHEIT.has(e)) return null;
+  }
+  return summe || null;
+}
+// Passt das Rezept noch in die Angebotspackungen der Woche (zusammen mit den schon geplanten, bis 15 % mehr)?
+function passtInPackung(r, b, angebote, wahl, bedarf) {
+  for (const z of b.treffer) {
+    const a = angebote.get(z);
+    if (!a || !a.inhalt || a.inhalt[2]) continue;
+    const m = rezeptMenge(r, z, a, wahl);
+    if (m && (bedarf.get(z) || 0) + m > a.inhalt[0] * (1 + SPIELRAUM)) return false;
+  }
+  return true;
+}
+
 function planBauen(wahl, angebote) {
-  const plan = {}, benutzt = new Set(), haupt = new Map();
+  const plan = {}, benutzt = new Set(), haupt = new Map(), bedarf = new Map();
   let fleisch = 0;
   for (const [m] of MAHLZEITEN) {
     plan[m] = [];
     if (!wahl.tage[m]) continue;
     if (wahl.rezepte && wahl.rezepte[m] === false) { plan[m] = ideenFuer(m, wahl); continue; }
     const kand = kandidaten(m, angebote, wahl);
-    for (const streng of [true, false]) {
+    // Stufe 2: auch die Angebotspackung muss reichen; Stufe 1: ohne diese Bedingung; Stufe 0: ohne Hauptzutat-Grenze
+    for (const stufe of [2, 1, 0]) {
+      const streng = stufe >= 1;
       for (const { r, b } of kand) {
         if (plan[m].length >= wahl.tage[m]) break;
         if (benutzt.has(r.id) || (streng && b.hauptsache && (haupt.get(b.hauptsache) || 0) >= 2)) continue;
         if (wahl.fleischMax != null && istFleischgericht(r) && fleisch >= wahl.fleischMax) continue;
+        if (stufe === 2 && !passtInPackung(r, b, angebote, wahl, bedarf)) continue;
         plan[m].push(r.id); benutzt.add(r.id);
+        for (const z of b.treffer) {
+          const a = angebote.get(z), menge = a && a.inhalt ? rezeptMenge(r, z, a, wahl) : null;
+          if (menge) bedarf.set(z, (bedarf.get(z) || 0) + menge);
+        }
         if (istFleischgericht(r)) fleisch++;
         if (b.hauptsache) haupt.set(b.hauptsache, (haupt.get(b.hauptsache) || 0) + 1);
       }
@@ -1133,6 +1165,7 @@ const r2 = (x) => Math.round(x * 100) / 100;
 // Flüssige Milchprodukte und passierte Tomaten: 1 ml ≈ 1 g (Dichte nahe 1) – nur als ca.-Angabe
 const ML_GLEICH_G = new Set(["Sahne", "Kochsahne", "Milch", "Buttermilch", "Joghurt", "Saure Sahne", "Schmand", "Crème fraîche",
   "Dosentomaten", "Kokosmilch"]);
+const SPIELRAUM = 0.15;                                     // bis 15 % weniger als im Rezept (Entscheidung 18.11.)
 const KLEINE_EINHEIT = new Set(["EL", "TL", "Prise", "Msp.", "Spritzer", "Schuss", "Tropfen"]);
 // Packungen kombinieren (Entscheidung 18.11.): alle Packungen derselben Zutat im selben Markt (Angebote der Woche und
 // Normalpreise) – die günstigste Kombination, die den Bedarf deckt; bei gleichem Preis die mit weniger Rest.
@@ -1201,10 +1234,18 @@ function packungen(liste, a, kandidaten = [a]) {
   } else return unsicher;
   geschaetzt = geschaetzt || fluessigGeschaetzt;
   menge = rundeMenge(menge, inh[1]);                       // so, wie die Liste die Menge zeigt
-  const k = besteKombination(menge, kandidaten.filter((x) => x.inhalt && x.inhalt[1] === inh[1]));
+  const passend = kandidaten.filter((x) => x.inhalt && x.inhalt[1] === inh[1]);
+  let k = besteKombination(menge, passend), weniger = 0;
   if (!k) return unsicher;
+  // Entscheidung 18.11.: Das Gericht soll mit der Packung auskommen – bis 15 % weniger als im Rezept ist in Ordnung,
+  // wenn es dadurch günstiger wird (nicht bei Stückware und nicht, wenn noch „nach Bedarf“ dazukommt)
+  if (inh[1] !== "stk" && !plus && !k.lose) {
+    const knapp = besteKombination(rundeMenge(menge * (1 - SPIELRAUM), inh[1]), passend);
+    if (knapp && !knapp.lose && knapp.gesamt < menge && knapp.preis < k.preis - 1e-9) { k = knapp; weniger = menge - knapp.gesamt; }
+  }
   const ersparnis = r2(k.teile.reduce((s, t) => s + (t.a.ersparnis || 0) * (k.lose ? menge / 1000 : t.n), 0));
-  return { teile: k.teile, anzahl: k.anzahl, lose: !!k.lose, menge, einheit: inh[1], rest: k.lose ? 0 : k.gesamt - menge,
+  return { teile: k.teile, anzahl: k.anzahl, lose: !!k.lose, menge, einheit: inh[1], weniger,
+           rest: k.lose || weniger ? 0 : k.gesamt - menge,
            geschaetzt, plus, preis: k.preis, ersparnis,
            preisNormal: r2(k.teile.filter((t) => t.a.normal).reduce((s, t) => s + (k.lose ? k.preis : t.a.preis * t.n), 0)) };
 }
@@ -1243,7 +1284,8 @@ function hakenZeile(p, a, id, haken) {
       const ca = pk.geschaetzt ? "ca. " : "";
       const teile = [pk.lose ? `${ca}${mengeKurz(pk.menge, "g")} × ${euro(a.preis)}/kg` :
         `du brauchst ${ca}${mengeKurz(pk.menge, pk.einheit)}${pk.plus ? " + nach Bedarf" : ""}` +
-        (pk.rest > 0.5 && !pk.plus ? `, übrig ${ca}${mengeKurz(pk.rest, pk.einheit)}` : "")];
+        (pk.weniger ? ` – ${mengeKurz(pk.menge - pk.weniger, pk.einheit)} reichen, wenn du ca. ${mengeKurz(pk.weniger, pk.einheit)} weniger nimmst` :
+          pk.rest > 0.5 && !pk.plus ? `, übrig ${ca}${mengeKurz(pk.rest, pk.einheit)}` : "")];
       if (pk.geschaetzt) teile.push(ML_GLEICH_G.has(p.zutat) ? "1 ml ≈ 1 g gerechnet" : "Stückgewicht geschätzt (BVL)");
       text.append(el("span", { class: "warum", text: teile.join(" · ") }));
     }
