@@ -1149,14 +1149,24 @@ function tauschFeld(m, i, angebote) {
     !(wahl.fleischMax != null && istFleischgericht(k.r) && fleischSonst >= wahl.fleischMax));
   const start = tausch.seite * TAUSCH_ZAHL, auswahl = alle.slice(start, start + TAUSCH_ZAHL);
   const ul = el("ul");
+  const jetzt = angebotDaten ? einkaufSumme(planIds) : null;
   for (const { r, b } of auswahl) {
+    // Differenz des ganzen Einkaufs, wenn dieses Gericht genommen wird (benötigte Packungen, wie auf der Liste)
+    let preisHinweis = null;
+    if (jetzt) {
+      const neu = einkaufSumme({ ...planIds, [m]: planIds[m].map((x, j) => (j === i ? r.id : x)) });
+      const d = r2(neu.summe - jetzt.summe), mehrOhne = neu.ohnePreis - jetzt.ohnePreis;
+      preisHinweis = el("span", { class: "g-angebot" + (d > 0 ? " keins" : ""), text: `Einkauf ${d > 0 ? "+" : d < 0 ? "−" : "±"}${euro(Math.abs(d))}` +
+        (mehrOhne > 0 ? ` (+${mehrOhne} Posten ohne Preis)` : mehrOhne < 0 ? ` (${-mehrOhne} Posten weniger ohne Preis)` : "") });
+    }
     const nehmen = el("button", { type: "button", class: "nehmen", text: "Nehmen" });
     nehmen.addEventListener("click", () => {
       planIds[m][i] = r.id; tausch = null;
       speicherSchreiben(planSchluessel, { wahl: planWahl(), plan: planIds });
       planZeigen();
     });
-    ul.append(el("li", {}, el("div", { class: "a-text" }, rezeptLink(r, "g-titel"), gerichtInfo(r), angebotHinweis(b.treffer, angebote)), nehmen));
+    ul.append(el("li", {}, el("div", { class: "a-text" }, rezeptLink(r, "g-titel"), gerichtInfo(r), angebotHinweis(b.treffer, angebote),
+      ...(preisHinweis ? [preisHinweis] : [])), nehmen));
   }
   const feld = el("div", { class: "tausch" }, el("span", { class: "g-tag", text: "Stattdessen" }), ul);
   if (!auswahl.length) feld.append(el("p", { class: "leise", text: "Keine weiteren Rezepte für diese Mahlzeit." }));
@@ -1415,7 +1425,14 @@ function zettel(titel, rechts, eintraege, haken, mitSumme, ohneAbteilung = false
 const laufwegRang = (p) => { const i = LAUFWEG.indexOf(p.abteilung); return i < 0 ? 99 : i; };
 const nachLaufweg = (x, y) => laufwegRang(x) - laufwegRang(y) || x.name.localeCompare(y.name, "de");
 
-function einkaufZeigen() {
+// Was kostet der Einkauf mit einem anderen Plan? (Entscheidung 18.11.: beim Tauschen die Differenz zeigen)
+function einkaufSumme(plan) {
+  const alt = planIds;
+  planIds = plan;
+  try { return einkaufZeigen({ ziel: document.createElement("div"), stumm: true }); } finally { planIds = alt; }
+}
+
+function einkaufZeigen(opts = {}) {
   const wahl = planWahl(), posten = new Map();
   for (const [m, mName] of MAHLZEITEN) (planIds[m] || []).forEach((id, i) => {
     const einkauf = einkaufFuer(wahl, kochtag(i, wahl.tage[m]));
@@ -1454,7 +1471,7 @@ function einkaufZeigen() {
       p.rezepte.add(r.titel);
     }
   });
-  const ziel = $("einkauf-liste");
+  const ziel = opts.ziel || $("einkauf-liste");
   ziel.replaceChildren();
   let gesamt = 0, imAngebot = 0, gespart = 0, summeAlle = 0, summeNormal = 0, ohnePreis = 0, summeVorrat = 0, geschaetzt = false;
   for (const p of posten.values()) p.pk = null;                 // Packungen werden je Darstellung neu gerechnet
@@ -1534,6 +1551,7 @@ function einkaufZeigen() {
   if (gespart > 0) teile.push(`Ersparnis laut Prospekt mindestens ${euro(r2(gespart))} (für die benötigten Packungen)`);
   if (geschaetzt) teile.push(angebotDaten.stueckgewichte_quelle || "Stückgewichte geschätzt");
   teile.push("Haken bleiben nur auf diesem Gerät gespeichert");
+  if (opts.stumm) return { summe: r2(summeAlle + summeNormal), ohnePreis };
   $("einkauf-meta").textContent = teile.join(" · ");
 }
 
