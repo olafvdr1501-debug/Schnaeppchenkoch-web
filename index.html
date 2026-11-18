@@ -631,9 +631,10 @@ async function ladeAngebote() {
     }
   }
   // Normalpreise (Aldi-Nord-Sortiment, online) für Zutaten ohne Angebot – nur freigegebene Zuordnungen
-  const np = d.normalpreise;
-  const normal = np ? np.liste.map((z) => ({ ...Object.fromEntries(np.felder.map((f, i) => [f, z[i]])), kette: np.kette, normal: true }))
-    .map((n) => ({ ...n, name: n.marke && !n.produkt.toLocaleLowerCase("de").includes(n.marke.toLocaleLowerCase("de")) ? `${n.marke} ${n.produkt}` : n.produkt })) : [];
+  // je Kette ein Block (Aldi Nord, Aldi Süd); ältere Daten hatten nur einen
+  const nps = Array.isArray(d.normalpreise) ? d.normalpreise : d.normalpreise ? [d.normalpreise] : [];
+  const normal = nps.flatMap((np) => np.liste.map((z) => ({ ...Object.fromEntries(np.felder.map((f, i) => [f, z[i]])), kette: np.kette, normal: true })))
+    .map((n) => ({ ...n, name: n.marke && !n.produkt.toLocaleLowerCase("de").includes(n.marke.toLocaleLowerCase("de")) ? `${n.marke} ${n.produkt}` : n.produkt }));
   return (angebotDaten = { ...d, liste, nachDomain, nachAdresse, normal });
 }
 
@@ -1279,7 +1280,8 @@ function einkaufZeigen() {
     if (vorrat.length) {
       const mitPreis = vorrat.sort(nachLaufweg).map((p) => [p, normalpreisFuer(p, wahl), "v|" + p.name]);
       summeVorrat += mitPreis.reduce((s, [, a]) => s + (a ? a.preis : 0), 0);
-      ziel.append(zettel("Vorrat – nur falls leer", mitPreis.some(([, a]) => a) ? "Normalpreise Aldi Nord, nicht in der Summe oben" : "",
+      const vorratKetten = [...new Set(mitPreis.filter(([, a]) => a).map(([, a]) => KETTE[a.kette].name))];
+      ziel.append(zettel("Vorrat – nur falls leer", vorratKetten.length ? `Normalpreise ${vorratKetten.join(", ")}, nicht in der Summe oben` : "",
         mitPreis, haken, mitPreis.some(([, a]) => a), true, "(falls alles fehlt)"));
     }
     gesamt += liste.length + vorrat.length;
