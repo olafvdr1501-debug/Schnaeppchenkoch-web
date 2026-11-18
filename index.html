@@ -1134,8 +1134,39 @@ const r2 = (x) => Math.round(x * 100) / 100;
 const ML_GLEICH_G = new Set(["Sahne", "Kochsahne", "Milch", "Buttermilch", "Joghurt", "Saure Sahne", "Schmand", "Crème fraîche",
   "Dosentomaten", "Kokosmilch"]);
 const KLEINE_EINHEIT = new Set(["EL", "TL", "Prise", "Msp.", "Spritzer", "Schuss", "Tropfen"]);
-function packungen(liste, a) {
-  const eine = { anzahl: 1, preis: a.preis, ersparnis: a.ersparnis || 0 };
+// Packungen kombinieren (Entscheidung 18.11.): alle Packungen derselben Zutat im selben Markt (Angebote der Woche und
+// Normalpreise) – die günstigste Kombination, die den Bedarf deckt; bei gleichem Preis die mit weniger Rest.
+function kombiKandidaten(a, wahl, tag) {
+  if (!a.inhalt) return [a];
+  const d = tagDatum(tag);
+  const gleich = (x) => x.zutat === a.zutat && x.kette === a.kette && x.inhalt && x.inhalt[1] === a.inhalt[1] && passtAngebot(x, wahl);
+  const angebote = angebotDaten.liste.filter((x) => gleich(x) && !x.ab && sichtbar(x) && giltAm(x, d));
+  return [...new Set([a, ...angebote, ...(angebotDaten.normal || []).filter(gleich)])];
+}
+function besteKombination(menge, kandidaten) {
+  let beste = null;
+  const besser = (l) => !beste || l.preis < beste.preis - 1e-9 ||
+    (Math.abs(l.preis - beste.preis) < 1e-9 && (l.gesamt < beste.gesamt || (l.gesamt === beste.gesamt && l.anzahl < beste.anzahl)));
+  for (const k of kandidaten.filter((k) => k.inhalt[2])) {                  // lose Ware: genau nach Gewicht
+    const l = { teile: [{ a: k, n: 1 }], lose: true, gesamt: menge, anzahl: 1, preis: Math.max(0.01, r2(k.preis * menge / 1000)) };
+    if (besser(l)) beste = l;
+  }
+  const packs = kandidaten.filter((k) => !k.inhalt[2]).sort((x, y) => y.inhalt[0] - x.inhalt[0]).slice(0, 8);
+  const suche = (i, rest, preis, gesamt, anzahl, teile) => {
+    if (beste && preis > beste.preis + 1e-9) return;
+    if (rest <= 1e-9) { const l = { teile, gesamt, anzahl, preis: r2(preis) }; if (besser(l)) beste = l; return; }
+    if (i >= packs.length) return;
+    const k = packs[i], s = k.inhalt[0];
+    for (let n = Math.ceil(rest / s - 1e-9); n >= 0; n--) {
+      suche(i + 1, rest - n * s, preis + n * k.preis, gesamt + n * s, anzahl + n, n ? [...teile, { a: k, n }] : teile);
+    }
+  };
+  suche(0, menge, 0, 0, 0, []);
+  return beste;
+}
+
+function packungen(liste, a, kandidaten = [a]) {
+  const eine = { anzahl: 1, preis: a.preis, ersparnis: a.ersparnis || 0, teile: [{ a, n: 1 }], preisNormal: a.normal ? a.preis : 0 };
   // Mit Mengen, die sich nicht umrechnen lassen: ehrlich sagen, dass eine Packung nur angenommen ist
   const mitMenge = liste.some((p) => [...p.mengen.keys()].some((e) => !KLEINE_EINHEIT.has(e)));
   const unsicher = { ...eine, unklar: mitMenge };
@@ -1168,16 +1199,14 @@ function packungen(liste, a) {
   } else if (inh[1] === "ml" && !g && !stk) {
     menge = ml;
   } else return unsicher;
-  if (inh[2]) {                                            // lose Ware: Preis je kg
-    const anteil = menge / 1000;
-    return { anzahl: 1, lose: true, menge, einheit: "g", geschaetzt, plus, preis: Math.max(0.01, r2(a.preis * anteil)),
-             ersparnis: r2((a.ersparnis || 0) * anteil) };
-  }
   geschaetzt = geschaetzt || fluessigGeschaetzt;
   menge = rundeMenge(menge, inh[1]);                       // so, wie die Liste die Menge zeigt
-  const anzahl = Math.max(1, Math.ceil(menge / inh[0] - 1e-9));
-  return { anzahl, menge, einheit: inh[1], rest: anzahl * inh[0] - menge, geschaetzt, plus,
-           preis: r2(a.preis * anzahl), ersparnis: r2((a.ersparnis || 0) * anzahl) };
+  const k = besteKombination(menge, kandidaten.filter((x) => x.inhalt && x.inhalt[1] === inh[1]));
+  if (!k) return unsicher;
+  const ersparnis = r2(k.teile.reduce((s, t) => s + (t.a.ersparnis || 0) * (k.lose ? menge / 1000 : t.n), 0));
+  return { teile: k.teile, anzahl: k.anzahl, lose: !!k.lose, menge, einheit: inh[1], rest: k.lose ? 0 : k.gesamt - menge,
+           geschaetzt, plus, preis: k.preis, ersparnis,
+           preisNormal: r2(k.teile.filter((t) => t.a.normal).reduce((s, t) => s + (k.lose ? k.preis : t.a.preis * t.n), 0)) };
 }
 // Rundung wie mengeText (g/ml: ab 1000 auf 100, ab 100 auf 10, sonst auf 5; Stück ganz), damit Bedarf + Rest = Packung
 function rundeMenge(x, e) {
@@ -1201,7 +1230,12 @@ function hakenZeile(p, a, id, haken) {
   if (a) {
     const mengeRoh = a.menge && a.menge.trim() !== "je" ? a.menge.replace(/(\d)\.(\d{2})(?!\d)/g, "$1,$2") : "";
     const menge = mengeRoh && !a.name.toLocaleLowerCase("de").includes(mengeRoh.toLocaleLowerCase("de")) ? " " + mengeRoh : "";
-    const kaufen = pk.lose ? `${a.name} – ca. ${mengeKurz(pk.menge, "g")} lose` : `${pk.anzahl > 1 ? pk.anzahl + " × " : ""}${a.name}${menge}`;
+    const packText = (x) => {
+      const roh = x.menge && x.menge.trim() !== "je" ? x.menge.replace(/(\d)\.(\d{2})(?!\d)/g, "$1,$2") : "";
+      return x.name + (roh && !x.name.toLocaleLowerCase("de").includes(roh.toLocaleLowerCase("de")) ? " " + roh : "");
+    };
+    const kaufen = pk.lose ? `${pk.teile[0].a.name} – ca. ${mengeKurz(pk.menge, "g")} lose` :
+      pk.teile.length === 1 && pk.teile[0].n === 1 ? packText(pk.teile[0].a) : pk.teile.map((x) => `${x.n} × ${packText(x.a)}`).join(" + ");
     text.append(el("span", { class: "h-was", text: kaufen }),
       el("span", { class: "warum", text: `${bedarf} · ${fuerText(p)}` }));
     for (const x of p.zusammen || []) text.append(el("span", { class: "warum", text: `${bedarfVon(x)} · ${fuerText(x)}` }));
@@ -1214,19 +1248,23 @@ function hakenZeile(p, a, id, haken) {
       text.append(el("span", { class: "warum", text: teile.join(" · ") }));
     }
     if (pk.unklar) text.append(el("span", { class: "warum", text: "1 Packung angenommen – Menge nicht umrechenbar, bitte selbst prüfen" }));
-    if (a.normal) text.append(el("span", { class: "warum", text: `Normalpreis ${KETTE[a.kette].name} (online)` }));
-    const g = p.geschlagen;
+    const teilNormal = pk.teile.filter((x) => x.a.normal).length, teilAngebot = pk.teile.length - teilNormal;
+    if (teilNormal) text.append(el("span", { class: "warum", text: teilAngebot ? `teils Angebot, teils Normalpreis ${KETTE[a.kette].name} (online)` :
+      `Normalpreis ${KETTE[a.kette].name} (online)` }));
+    if (pk.teile.length > 1) text.append(el("span", { class: "warum", text: "günstigste Packungskombination für diese Menge" }));
+    const g = p.geschlagen && !pk.teile.some((x) => x.a === p.geschlagen) ? p.geschlagen : null;
     if (g) text.append(el("span", { class: "warum spar", text: `günstiger als das Angebot bei ${KETTE[g.kette].name}: ${g.name} ${euro(g.preis)} ` +
       `(${basisText(a.basis)} statt ${basisText(g.basis)})` }));
-    if (a.ersparnis) text.append(el("span", { class: "warum spar", text: `${a.bezug} ${euro(a.vergleichspreis)}, du sparst ${euro(pk.ersparnis)}` +
-      (pk.anzahl > 1 ? ` (${pk.anzahl} Packungen)` : "") }));
+    const sparTeil = pk.teile.find((x) => x.a.ersparnis);
+    if (sparTeil && pk.ersparnis > 0) text.append(el("span", { class: "warum spar", text: `${sparTeil.a.bezug} ${euro(sparTeil.a.vergleichspreis)}, du sparst ${euro(pk.ersparnis)}` +
+      (sparTeil.n > 1 ? ` (${sparTeil.n} Packungen)` : "") }));
     if (a.app_preis && a.app_preis < a.preis) text.append(el("span", { class: "warum", text: `mit App ${euro(a.app_preis)}` }));
   } else {
     text.append(el("span", { class: "h-was", text: bedarf }), el("span", { class: "warum", text: fuerText(p) }));
     if (p.weggelassen) text.append(el("span", { class: "warum", text: `Im Angebot bei ${KETTE[p.weggelassen.kette].name} (${euro(p.weggelassen.preis)}) – weggelassen, sonst ein Markt mehr` }));
     if (p.normalHinweis) text.append(el("span", { class: "warum", text: `Normalpreis ${KETTE[p.normalHinweis.kette].name}: ${p.normalHinweis.name} ${euro(p.normalHinweis.preis)} – nicht eingeplant, sonst ein Markt mehr` }));
   }
-  const preis = el("span", { class: "preis" + (a && a.normal ? " normal" : ""), text: a ? (a.ab ? "ab " : "") + (pk.lose ? "ca. " : "") + euro(pk.preis) : "" });
+  const preis = el("span", { class: "preis" + (a && pk.teile.every((x) => x.a.normal) ? " normal" : ""), text: a ? (a.ab ? "ab " : "") + (pk.lose ? "ca. " : "") + euro(pk.preis) : "" });
   return el("li", {}, el("label", {}, kasten, text, preis));
 }
 
@@ -1339,16 +1377,16 @@ function einkaufZeigen() {
         if (gleich) (gleich[0].zusammen = gleich[0].zusammen || []).push(p); else hier.push([p, a]);
       }
       if (!hier.length) continue;
-      for (const [p, a] of hier) p.pk = packungen([p, ...(p.zusammen || [])], a);
+      for (const [p, a] of hier) p.pk = packungen([p, ...(p.zusammen || [])], a, kombiKandidaten(a, wahl, tag));
       alleKetten.add(k);
-      const nAngebot = hier.filter(([, a]) => !a.normal).length, nNormal = hier.length - nAngebot;
+      const nAngebot = hier.filter(([p]) => p.pk.teile.some((x) => !x.a.normal)).length, nNormal = hier.length - nAngebot;
       ziel.append(zettel(KETTE[k].name + (tagName ? " · " + tagName : ""),
         [nAngebot ? `${nAngebot} ${nAngebot === 1 ? "Angebot" : "Angebote"}` : "", nNormal ? `${nNormal} Normalpreis${nNormal === 1 ? "" : "e"}` : ""].filter(Boolean).join(" + "),
         hier.map(([p, a]) => [p, a, hid(p)]), haken, true));
       imAngebot += nAngebot;
       gespart += hier.reduce((s, [p]) => s + p.pk.ersparnis, 0);
-      summeAlle += hier.filter(([, a]) => !a.normal).reduce((s, [p]) => s + p.pk.preis, 0);
-      summeNormal += hier.filter(([, a]) => a.normal).reduce((s, [p]) => s + p.pk.preis, 0);
+      summeAlle += hier.reduce((s, [p]) => s + p.pk.preis - (p.pk.preisNormal || 0), 0);
+      summeNormal += hier.reduce((s, [p]) => s + (p.pk.preisNormal || 0), 0);
       geschaetzt = geschaetzt || hier.some(([p]) => p.pk.geschaetzt);
     }
     const ohne = liste.filter((p) => !gewaehlt.has(p)).sort(nachLaufweg);
