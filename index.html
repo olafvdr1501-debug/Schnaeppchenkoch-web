@@ -200,6 +200,23 @@ button.tauschen, button.nehmen { font: inherit; font-size: 15px; font-weight: 60
 .einkauf h4.einkaufstag { font-family: var(--font-display); font-size: 17px; letter-spacing: 0; text-transform: none; color: var(--ink); margin-top: 14px; }
 .einkauf h5 { font-size: 14px; font-weight: 700; color: var(--leaf); margin: 6px 0 0; }
 .einkauf h4 { font-size: 13px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin: 8px 0 0; }
+.zettel { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 6px; min-width: 0; }
+.zettel-kopf { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.zettel-kopf h5 { margin: 0; font-family: var(--font-display); font-size: 16px; color: var(--ink); }
+.zettel-kopf span { font-size: 12px; color: var(--muted); }
+.zettel .dept { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--warn); font-weight: 700; margin: 6px 0 0; }
+ul.haken-liste { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+ul.haken-liste label { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: baseline; cursor: pointer; padding: 6px 0; border-bottom: 1px solid var(--line); }
+ul.haken-liste li:last-child label { border-bottom: 0; }
+ul.haken-liste input { width: 20px; height: 20px; margin: 0; accent-color: var(--leaf); transform: translateY(4px); }
+ul.haken-liste input:checked + span { text-decoration: line-through; color: var(--muted); }
+ul.haken-liste input:checked + span .warum { text-decoration: none; }
+.h-was { font-weight: 600; overflow-wrap: anywhere; }
+.warum { display: block; font-size: 13px; font-weight: 400; color: var(--muted); }
+.warum.spar { color: var(--leaf); }
+.preis { font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; font-weight: 600; }
+.zettel .summe { display: flex; justify-content: space-between; border-top: 1px dashed var(--line); padding-top: 8px; font-weight: 700; }
+.zettel .summe small { font-weight: 400; color: var(--muted); }
 ul.posten { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 ul.posten li { display: grid; gap: 1px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
 ul.posten li:last-child { border-bottom: 0; }
@@ -1051,21 +1068,55 @@ function mengeText(einheit, x) {
   return `${zahlText(halb)} ${einheit}`;
 }
 
-function postenLi(p, a) {
-  // Mehrere Einheiten (z. B. „1“ und „940 g“): die einheitslose Menge als Stück kennzeichnen
+function fuerText(p) {
+  const teile = [...p.rezepte];
+  if (p.mal && p.mal.size) teile.push([...p.mal].map(([n, x]) => `${x}× ${n}`).join(" + ") + ` (${planWahl().personen} ${planWahl().personen === 1 ? "Person" : "Personen"})`);
+  return "für " + teile.join(", ");
+}
+
+function hakenZeile(p, a, id, haken) {
   const mengen = [...p.mengen].map(([e, x]) => mengeText(e || (p.mengen.size > 1 ? "Stück" : ""), x)).join(" + ");
-  const was = el("span", { class: "p-was" });
-  if (mengen) was.append(el("span", { class: "p-menge", text: mengen + " " }));
-  was.append(document.createTextNode(p.name + (p.optional ? " (nach Belieben)" : !mengen ? " (nach Bedarf)" : "")));
-  const li = el("li", {}, was, el("span", { class: "p-fuer", text: "für " + [...p.rezepte].join(", ") }));
+  const bedarf = (mengen ? mengen + " " : "") + p.name + (p.optional ? " (nach Belieben)" : !mengen || p.mal ? " (nach Bedarf)" : "");
+  const kasten = el("input", { type: "checkbox" });
+  kasten.checked = haken.has(id);
+  kasten.addEventListener("change", () => {
+    if (kasten.checked) haken.add(id); else haken.delete(id);
+    speicherSchreiben("haken:" + planSchluessel, [...haken]);
+  });
+  const text = el("span", {});
   if (a) {
-    const menge = a.menge && a.menge.trim() !== "je" ? ` (${a.menge.replace(/(\d)\.(\d{2})(?!\d)/g, "$1,$2")})` : "";
-    li.append(el("span", { class: "p-angebot", text: `Angebot: ${a.name} · ${(a.ab ? "ab " : "") + euro(a.preis)}${a.ersparnis ? ` (${a.bezug} ${euro(a.vergleichspreis)}, −${euro(a.ersparnis)})` : ""}${menge}` }));
-  } else if (p.weggelassen) {
-    const w = p.weggelassen;
-    li.append(el("span", { class: "p-fuer", text: `Im Angebot bei ${KETTE[w.kette].name} (${euro(w.preis)}) – weggelassen, sonst ein Markt mehr` }));
+    const menge = a.menge && a.menge.trim() !== "je" ? " " + a.menge.replace(/(\d)\.(\d{2})(?!\d)/g, "$1,$2") : "";
+    text.append(el("span", { class: "h-was", text: a.name + menge }),
+      el("span", { class: "warum", text: `${bedarf} · ${fuerText(p)}` }));
+    if (a.ersparnis) text.append(el("span", { class: "warum spar", text: `${a.bezug} ${euro(a.vergleichspreis)}, du sparst ${euro(a.ersparnis)}` }));
+    if (a.app_preis && a.app_preis < a.preis) text.append(el("span", { class: "warum", text: `mit App ${euro(a.app_preis)}` }));
+  } else {
+    text.append(el("span", { class: "h-was", text: bedarf }), el("span", { class: "warum", text: fuerText(p) }));
+    if (p.weggelassen) text.append(el("span", { class: "warum", text: `Im Angebot bei ${KETTE[p.weggelassen.kette].name} (${euro(p.weggelassen.preis)}) – weggelassen, sonst ein Markt mehr` }));
   }
-  return li;
+  const preis = el("span", { class: "preis", text: a ? (a.ab ? "ab " : "") + euro(a.preis) : "" });
+  return el("li", {}, el("label", {}, kasten, text, preis));
+}
+
+// Zettel: Karte mit Überschrift, Posten nach Abteilung im Laufweg, auf Wunsch mit Summe der Angebote
+function zettel(titel, rechts, eintraege, haken, mitSumme, ohneAbteilung = false) {
+  const karte = el("div", { class: "zettel" }, el("div", { class: "zettel-kopf" }, el("h5", { text: titel }), el("span", { text: rechts })));
+  let abt = null, ul = null;
+  for (const [p, a, id] of eintraege) {
+    if (!ul || (!ohneAbteilung && p.abteilung !== abt)) {
+      abt = p.abteilung;
+      ul = el("ul", { class: "haken-liste" });
+      if (!ohneAbteilung) karte.append(el("p", { class: "dept", text: abt || "Sonstiges" }));
+      karte.append(ul);
+    }
+    ul.append(hakenZeile(p, a, id, haken));
+  }
+  if (mitSumme) {
+    const summe = Math.round(eintraege.reduce((s, [, a]) => s + (a ? a.preis : 0), 0) * 100) / 100;
+    karte.append(el("div", { class: "summe" }, el("span", {}, document.createTextNode("Summe "), el("small", { text: "(je Angebot eine Packung)" })),
+      el("span", { class: "preis", text: euro(summe) })));
+  }
+  return karte;
 }
 
 const laufwegRang = (p) => { const i = LAUFWEG.indexOf(p.abteilung); return i < 0 ? 99 : i; };
@@ -1077,12 +1128,14 @@ function einkaufZeigen() {
     const einkauf = einkaufFuer(wahl, kochtag(i, wahl.tage[m]));
     if (istIdee(id)) {                                     // Bausteine ohne Gramm: „für 4× Frühstück, 2 Personen“
       for (const t of ideeTeile(ideeVon(id), wahl) || []) {
-        const schluessel = "idee:" + t.name;              // gleicher Baustein (Butter) für Frühstück und Abendbrot: ein Posten
-        if (!posten.has(schluessel)) posten.set(schluessel, { name: t.name, idee: t, abteilung: t.abteilung, mengen: new Map(),
-          ohne: true, optional: false, rezepte: new Set(), mal: new Map(), einkauf });
+        // Gleicher Baustein für Frühstück und Abendbrot ein Posten; ein Baustein mit genau einer Zutat (Butter, Eier) teilt
+        // sich den Posten mit derselben Zutat aus den Rezepten
+        const schluessel = t.keys.length === 1 ? t.keys[0] : "idee:" + t.name;
+        if (!posten.has(schluessel)) posten.set(schluessel, { name: t.keys.length === 1 ? t.keys[0] : t.name, zutat: t.keys.length === 1 ? t.keys[0] : null,
+          abteilung: t.abteilung, mengen: new Map(), ohne: true, optional: false, rezepte: new Set(), einkauf });
         const p = posten.get(schluessel);
-        p.einkauf = Math.min(p.einkauf, einkauf); p.mal.set(mName, (p.mal.get(mName) || 0) + 1);
-        p.rezepte = new Set([[...p.mal].map(([n, x]) => `${x}× ${n}`).join(" + ") + `, ${wahl.personen} ${wahl.personen === 1 ? "Person" : "Personen"}`]);
+        p.idee = p.idee || t; p.mal = p.mal || new Map();
+        p.einkauf = Math.min(p.einkauf, einkauf); p.mal.set(mName, (p.mal.get(mName) || 0) + 1); p.optional = false;
       }
       return;
     }
@@ -1106,7 +1159,8 @@ function einkaufZeigen() {
   });
   const ziel = $("einkauf-liste");
   ziel.replaceChildren();
-  let gesamt = 0, imAngebot = 0, gespart = 0;
+  let gesamt = 0, imAngebot = 0, gespart = 0, summeAlle = 0;
+  const haken = new Set(speicherLesen("haken:" + planSchluessel) || []);
   const alleKetten = new Set(), tage = einkaufstage(wahl);
   for (const tag of tage) {
     const liste = [...posten.values()].filter((p) => p.abteilung !== "Vorrat" && p.einkauf === tag);
@@ -1129,29 +1183,34 @@ function einkaufZeigen() {
       }
       ketten = ketten.filter((k) => behalten.has(k));
     }
-    // 3. Anzeige: je Markt die Angebote im Laufweg, dann alles ohne Angebot, dann Vorrat
-    const kopf = tage.length > 1 ? `${tag === 0 ? "Montag" : "Donnerstag"}, ${fmtTag(tagDatum(tag))}` : `Wocheneinkauf ab ${fmtTag(tagDatum(tag))}`;
+    // 3. Anzeige wie der Einkaufszettel aus KW 47: je Markt eine Karte zum Abhaken, Abteilungen im Laufweg, Summe;
+    //    dann alles ohne Angebot, dann Vorrat
+    const tagName = tage.length > 1 ? `${tag === 0 ? "Montag" : "Donnerstag"} ${fmtTag(tagDatum(tag)).replace(/^\S+ /, "")}` : "";
+    const kopf = tage.length > 1 ? `Einkauf ${tag === 0 ? "Montag" : "Donnerstag"}, ${fmtTag(tagDatum(tag))}` : `Wocheneinkauf ab ${fmtTag(tagDatum(tag))}`;
     ziel.append(el("h4", { class: "einkaufstag", text: kopf }));
+    const hid = (p) => `${tag}|${p.name}`;
     for (const k of ketten) {
       const hier = [...gewaehlt].filter(([, a]) => a.kette === k).sort(([x], [y]) => nachLaufweg(x, y));
       if (!hier.length) continue;
       alleKetten.add(k);
-      ziel.append(el("h5", { text: `${KETTE[k].name} · ${hier.length} ${hier.length === 1 ? "Angebot" : "Angebote"}` }),
-        el("ul", { class: "posten" }, ...hier.map(([p, a]) => postenLi(p, a))));
+      ziel.append(zettel(KETTE[k].name + (tagName ? " · " + tagName : ""), `${hier.length} ${hier.length === 1 ? "Angebot" : "Angebote"}`,
+        hier.map(([p, a]) => [p, a, hid(p)]), haken, true));
       imAngebot += hier.length;
       gespart += hier.reduce((s, [, a]) => s + (a.ersparnis || 0), 0);
+      summeAlle += hier.reduce((s, [, a]) => s + a.preis, 0);
     }
     const ohne = liste.filter((p) => !gewaehlt.has(p)).sort(nachLaufweg);
-    if (ohne.length) ziel.append(el("h5", { text: ketten.length ? "Ohne Angebot – in einem dieser Märkte" : "Ohne Angebot" }),
-      el("ul", { class: "posten" }, ...ohne.map((p) => postenLi(p, null))));
-    if (vorrat.length) ziel.append(el("h5", { text: "Vorrat – nur falls leer" }),
-      el("ul", { class: "posten" }, ...vorrat.sort(nachLaufweg).map((p) => postenLi(p, null))));
+    if (ohne.length) ziel.append(zettel(ketten.length ? "Ohne Angebot – in einem dieser Märkte" : "Ohne Angebot", `${ohne.length} Posten`,
+      ohne.map((p) => [p, null, hid(p)]), haken, false));
+    if (vorrat.length) ziel.append(zettel("Vorrat – nur falls leer", "", vorrat.sort(nachLaufweg).map((p) => [p, null, "v|" + p.name]), haken, false, true));
     gesamt += liste.length + vorrat.length;
   }
   const teile = [`${gesamt} Posten für ${wahl.personen} ${wahl.personen === 1 ? "Person" : "Personen"}`,
     `${imAngebot} davon im Angebot` + (alleKetten.size ? ` bei ${[...alleKetten].map((k) => KETTE[k].name).join(", ")}` : "")];
   // Ersparnis rechnet nur gegen Vergleichspreise aus dem Prospekt (statt/UVP), je Angebot eine Packung
+  if (summeAlle > 0) teile.push(`Angebote zusammen ${euro(Math.round(summeAlle * 100) / 100)}`);
   if (gespart > 0) teile.push(`Ersparnis laut Prospekt mindestens ${euro(Math.round(gespart * 100) / 100)} (je Angebot eine Packung gerechnet)`);
+  teile.push("Haken bleiben nur auf diesem Gerät gespeichert");
   $("einkauf-meta").textContent = teile.join(" · ");
 }
 
