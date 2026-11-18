@@ -1079,16 +1079,46 @@ function fuerText(p) {
   return "für " + teile.join(", ");
 }
 
-function normalpreisFuer(p, wahl) {
+function normalpreisFuer(p, wahl, nurKetten = null) {
   const keys = p.idee ? p.idee.keys : p.zutat ? [p.zutat] : [];
   let beste = null;
   for (const n of angebotDaten.normal || []) {
-    if (!planKetten.includes(n.kette) || !(keys.includes(n.zutat) || keys.includes(oberbegriff(n.zutat)))) continue;
+    if (!planKetten.includes(n.kette) || !(keys.includes(n.zutat) || (!p.exakt && keys.includes(oberbegriff(n.zutat))))) continue;
+    if (nurKetten && !nurKetten.has(n.kette)) continue;
     if (!passtAngebot(n, wahl)) continue;
     if (!beste || n.preis < beste.preis) beste = n;               // kleinste Packung zuerst (Mengen folgen in einem eigenen Schritt)
   }
   return beste;
 }
+
+// Am günstigsten (Entscheidung 18.11.): Bezug ist das Angebot mit der größten Ersparnis (wie bisher). Ein Angebot oder ein
+// Normalpreis gleicher Ware, der je kg/Liter/Stück weniger kostet, schlägt es – verglichen wird nur in derselben Einheit
+// (basis aus kilopreis.py; ohne sicher ablesbaren Preis je Einheit kein Vergleich). Ohne Angebot: der Normalpreis.
+function guenstigsteFuer(p, wahl, tage, nurKetten = null) {
+  const keys = p.idee ? p.idee.keys : p.zutat ? [p.zutat] : [];
+  if (!keys.length) return null;
+  const daten = tage.map(tagDatum), angebote = [];
+  for (const a of angebotDaten.liste) {
+    if (!a.zutat || !(keys.includes(a.zutat) || keys.includes(oberbegriff(a.zutat)))) continue;
+    if (!planKetten.includes(a.kette) || !sichtbar(a) || !daten.some((d) => giltAm(a, d))) continue;
+    if ((nurKetten && !nurKetten.has(a.kette)) || !passtAngebot(a, wahl)) continue;
+    angebote.push(a);
+  }
+  const bezug = angebote.reduce((b, a) => !b || a.prozent > b.prozent || (a.prozent === b.prozent && a.preis < b.preis) ? a : b, null);
+  if (!bezug) { const normal = normalpreisFuer(p, wahl, nurKetten); return normal ? { a: normal } : null; }
+  if (!bezug.basis) return { a: bezug };
+  // Gleiche Ware heißt: dieselbe Zutat wie das Angebot (Rinderhack nur gegen Rinderhack, Käse nicht gegen Aufstrich).
+  // Gewinnt nur, was je kg/Liter/Stück weniger kostet UND an der Kasse nicht mehr als das Angebot – so wird keine
+  // größere Packung untergeschoben (Mengen und Reste folgen in einem eigenen Schritt).
+  const normale = (angebotDaten.normal || []).filter((n) => n.zutat === bezug.zutat && planKetten.includes(n.kette) &&
+    (!nurKetten || nurKetten.has(n.kette)) && passtAngebot(n, wahl));
+  let beste = bezug;
+  for (const x of [...angebote.filter((a) => a.zutat === bezug.zutat), ...normale]) {
+    if (x.basis && x.basis[1] === bezug.basis[1] && x.basis[0] < beste.basis[0] && x.preis <= bezug.preis) beste = x;
+  }
+  return { a: beste, geschlagen: beste === bezug ? null : bezug };
+}
+const basisText = (b) => `${euro(b[0])}/${b[1] === "stk" ? "Stück" : b[1] === "l" ? "Liter" : b[1]}`;
 
 function bedarfVon(p) {
   const mengen = [...p.mengen].map(([e, x]) => mengeText(e || (p.mengen.size > 1 ? "Stück" : ""), x)).join(" + ");
@@ -1110,6 +1140,9 @@ function hakenZeile(p, a, id, haken) {
       el("span", { class: "warum", text: `${bedarf} · ${fuerText(p)}` }));
     for (const x of p.zusammen || []) text.append(el("span", { class: "warum", text: `${bedarfVon(x)} · ${fuerText(x)}` }));
     if (a.normal) text.append(el("span", { class: "warum", text: `Normalpreis ${KETTE[a.kette].name} (online)` }));
+    const g = p.geschlagen;
+    if (g) text.append(el("span", { class: "warum spar", text: `günstiger als das Angebot bei ${KETTE[g.kette].name}: ${g.name} ${euro(g.preis)} ` +
+      `(${basisText(a.basis)} statt ${basisText(g.basis)})` }));
     if (a.ersparnis) text.append(el("span", { class: "warum spar", text: `${a.bezug} ${euro(a.vergleichspreis)}, du sparst ${euro(a.ersparnis)}` }));
     if (a.app_preis && a.app_preis < a.preis) text.append(el("span", { class: "warum", text: `mit App ${euro(a.app_preis)}` }));
   } else {
@@ -1194,19 +1227,25 @@ function einkaufZeigen() {
     const vorrat = tag === 0 ? [...posten.values()].filter((p) => p.abteilung === "Vorrat") : [];
     if (!liste.length && !vorrat.length) continue;
     // 1. Bestes Angebot je Zutat, das an diesem Einkaufstag gilt
-    const angebote = angeboteJeZutat([tag]), gewaehlt = new Map();
-    for (const p of liste) { const a = p.idee ? besteFuerTeil(p.idee.keys, wahl, [tag]) : p.zutat && angebote.get(p.zutat); if (a) gewaehlt.set(p, a); }
-    // 2. Höchstens N Märkte: die mit den meisten genutzten Angeboten (bei Gleichstand mehr Ersparnis). Zutaten aus
-    //    anderen Märkten bekommen das beste Angebot der gewählten Märkte – oder keins.
+    //    – am günstigsten: Angebot oder Normalpreis gleicher Ware mit dem niedrigsten Preis je kg/Liter/Stück
+    const gewaehlt = new Map();
+    for (const p of liste) {
+      p.geschlagen = p.weggelassen = p.normalHinweis = null;
+      const w = guenstigsteFuer(p, wahl, [tag]);
+      if (w) { gewaehlt.set(p, w.a); p.geschlagen = w.geschlagen; }
+    }
+    // 2. Höchstens N Märkte: die mit den meisten Posten (Angebote und Normalpreise; bei Gleichstand mehr Ersparnis).
+    //    Zutaten aus anderen Märkten bekommen das Günstigste der gewählten Märkte – oder keins.
     let ketten = [...new Set([...gewaehlt.values()].map((a) => a.kette))];
-    const gewicht = (k) => [...gewaehlt.values()].filter((a) => a.kette === k).reduce((s, a) => s + 1000 + a.ersparnis, 0);
+    const gewicht = (k) => [...gewaehlt.values()].filter((a) => a.kette === k).reduce((s, a) => s + 1000 + (a.ersparnis || 0), 0);
     ketten.sort((x, y) => gewicht(y) - gewicht(x));
     if (wahl.maerkte && ketten.length > wahl.maerkte) {
-      const behalten = new Set(ketten.slice(0, wahl.maerkte)), ersatz = angeboteJeZutat([tag], behalten);
+      const behalten = new Set(ketten.slice(0, wahl.maerkte));
       for (const [p, a] of [...gewaehlt]) {
         if (behalten.has(a.kette)) continue;
-        const b = p.idee ? besteFuerTeil(p.idee.keys, wahl, [tag], behalten) : ersatz.get(p.zutat);
-        if (b) gewaehlt.set(p, b); else { gewaehlt.delete(p); p.weggelassen = a; }
+        const w = guenstigsteFuer(p, wahl, [tag], behalten);
+        if (w) { gewaehlt.set(p, w.a); p.geschlagen = w.geschlagen; }
+        else { gewaehlt.delete(p); p.geschlagen = null; if (a.normal) p.normalHinweis = a; else p.weggelassen = a; }
       }
       ketten = ketten.filter((k) => behalten.has(k));
     }
@@ -1216,18 +1255,6 @@ function einkaufZeigen() {
     const kopf = tage.length > 1 ? `Einkauf ${tag === 0 ? "Montag" : "Donnerstag"}, ${fmtTag(tagDatum(tag))}` : `Wocheneinkauf ab ${fmtTag(tagDatum(tag))}`;
     ziel.append(el("h4", { class: "einkaufstag", text: kopf }));
     const hid = (p) => `${tag}|${p.name}`;
-    // Ohne Angebot: Normalpreis (Aldi Nord, online) – auf die Aldi-Karte, wenn Aldi schon dabei ist oder noch Platz ist
-    const normalNeu = new Map();
-    for (const p of liste) {
-      if (gewaehlt.has(p)) continue;
-      const n = normalpreisFuer(p, wahl);
-      if (n) normalNeu.set(p, n);
-    }
-    const normalKetten = [...new Set([...normalNeu.values()].map((n) => n.kette))];
-    for (const k of normalKetten) if (!ketten.includes(k) && (!wahl.maerkte || ketten.length < wahl.maerkte)) ketten.push(k);
-    for (const [p, n] of normalNeu) {
-      if (ketten.includes(n.kette)) gewaehlt.set(p, n); else p.normalHinweis = n;
-    }
     for (const k of ketten) {
       const hier = [];
       for (const [p, a] of [...gewaehlt].filter(([, a]) => a.kette === k).sort(([x], [y]) => nachLaufweg(x, y))) {
