@@ -989,12 +989,19 @@ function frischeZutaten(r) {
   return [...new Set(r.zutaten.filter((x) => x.zutat && !x.vorrat && FRISCH_ABTEILUNG.has(x.abteilung) && !HALTBAR.has(x.zutat))
     .map((x) => x.zutat))];
 }
+// Zwei Einkäufe (Entscheidung 18.11.): frische, schnell verderbliche Zutaten je Einkauf getrennt kaufen und rechnen
+// Getrennt nur Fleisch, Fisch, frisches Obst und Gemüse; Kühlregal (Milch, Sahne, Käse …) hält die Woche (Annahme)
+const verderblich = (z, abteilung) => (abteilung === "Fleisch & Fisch" || abteilung === "Obst & Gemüse") && !HALTBAR.has(z);
+function bedarfSchluessel(r, z, wahl, einkauf) {
+  const x = r.zutaten.find((y) => y.zutat === z);
+  return wahl.einkauf === 2 && x && verderblich(z, x.abteilung) ? `${z}@${einkauf}` : z;
+}
 const restVon = (menge, groesse) => Math.ceil(menge / groesse - 1e-9) * groesse - menge;
-function restBonus(r, angebote, wahl, bedarf) {
+function restBonus(r, angebote, wahl, bedarf, einkauf = 0) {
   let bonus = 0;
   const genutzt = [];
   for (const z of frischeZutaten(r)) {
-    const a = packungFuer(z, angebote), schon = bedarf.get(z) || 0;
+    const a = packungFuer(z, angebote), schon = bedarf.get(bedarfSchluessel(r, z, wahl, einkauf)) || 0;
     if (!a || !schon) continue;
     const rest = restVon(schon, a.inhalt[0]), m = rezeptMenge(r, z, a, wahl);
     if (rest <= 0 || !m) continue;
@@ -1003,10 +1010,10 @@ function restBonus(r, angebote, wahl, bedarf) {
   }
   return { bonus, genutzt };
 }
-function bedarfMerken(r, angebote, wahl, bedarf) {
+function bedarfMerken(r, angebote, wahl, bedarf, einkauf = 0) {
   for (const z of new Set([...frischeZutaten(r), ...bewerten(r, angebote).treffer])) {
-    const a = packungFuer(z, angebote), m = a ? rezeptMenge(r, z, a, wahl) : null;
-    if (m) bedarf.set(z, (bedarf.get(z) || 0) + m);
+    const a = packungFuer(z, angebote), m = a ? rezeptMenge(r, z, a, wahl) : null, k = bedarfSchluessel(r, z, wahl, einkauf);
+    if (m) bedarf.set(k, (bedarf.get(k) || 0) + m);
   }
 }
 // Für die Anzeige: welche Gerichte (in der Reihenfolge der Woche) einen Rest verwerten
@@ -1015,23 +1022,23 @@ function resteImPlan(plan, angebote, wahl) {
   for (const [m] of MAHLZEITEN) (plan[m] || []).forEach((id, i) => { if (!istIdee(id)) folge.push([kochtag(i, wahl.tage[m]), id]); });
   folge.sort((x, y) => x[0] - y[0]);
   const bedarf = new Map(), ergebnis = new Map();
-  for (const [, id] of folge) {
-    const r = rezeptDaten.nachId.get(id);
+  for (const [tag, id] of folge) {
+    const r = rezeptDaten.nachId.get(id), einkauf = einkaufFuer(wahl, tag);
     if (!r) continue;
-    const { genutzt } = restBonus(r, angebote, wahl, bedarf);
+    const { genutzt } = restBonus(r, angebote, wahl, bedarf, einkauf);
     if (genutzt.length) ergebnis.set(id, genutzt);
-    bedarfMerken(r, angebote, wahl, bedarf);
+    bedarfMerken(r, angebote, wahl, bedarf, einkauf);
   }
   return ergebnis;
 }
 
 // Passt das Rezept noch in die Angebotspackungen der Woche (zusammen mit den schon geplanten, bis 15 % mehr)?
-function passtInPackung(r, b, angebote, wahl, bedarf) {
+function passtInPackung(r, b, angebote, wahl, bedarf, einkauf = 0) {
   for (const z of b.treffer) {
     const a = angebote.get(z);
     if (!a || !a.inhalt || a.inhalt[2]) continue;
     const m = rezeptMenge(r, z, a, wahl);
-    if (m && (bedarf.get(z) || 0) + m > a.inhalt[0] * (1 + SPIELRAUM)) return false;
+    if (m && (bedarf.get(bedarfSchluessel(r, z, wahl, einkauf)) || 0) + m > a.inhalt[0] * (1 + SPIELRAUM)) return false;
   }
   return true;
 }
@@ -1050,17 +1057,18 @@ function planBauen(wahl, angebote) {
       while (plan[m].length < wahl.tage[m]) {
         // je freiem Platz das Rezept mit dem besten Wert inklusive Bonus für verwertete Reste
         let wahlR = null, wahlB = null, bester = -Infinity;
+        const einkauf = einkaufFuer(wahl, kochtag(plan[m].length, wahl.tage[m]));
         for (const { r, b } of kand) {
           if (benutzt.has(r.id) || (streng && b.hauptsache && (haupt.get(b.hauptsache) || 0) >= 2)) continue;
           if (wahl.fleischMax != null && istFleischgericht(r) && fleisch >= wahl.fleischMax) continue;
-          if (stufe === 2 && !passtInPackung(r, b, angebote, wahl, bedarf)) continue;
-          const wert = b.wert + restBonus(r, angebote, wahl, bedarf).bonus;
+          if (stufe === 2 && !passtInPackung(r, b, angebote, wahl, bedarf, einkauf)) continue;
+          const wert = b.wert + restBonus(r, angebote, wahl, bedarf, einkauf).bonus;
           if (wert > bester) { bester = wert; wahlR = r; wahlB = b; }
         }
         if (!wahlR) break;
         const r = wahlR, b = wahlB;
         plan[m].push(r.id); benutzt.add(r.id);
-        bedarfMerken(r, angebote, wahl, bedarf);
+        bedarfMerken(r, angebote, wahl, bedarf, einkauf);
         if (istFleischgericht(r)) fleisch++;
         if (b.hauptsache) haupt.set(b.hauptsache, (haupt.get(b.hauptsache) || 0) + 1);
       }
@@ -1429,7 +1437,9 @@ function einkaufZeigen() {
     const zutaten = r.zutaten.flatMap((z) => z.vorrat && z.zutat && z.zutat.includes("+") ? z.zutat.split("+").map((x) => ({ ...z, name: x, zutat: x })) : [z]);
     for (const z of zutaten) {
       // Einzahl und Mehrzahl zusammen: „Gewürzgurke“ und „Gewürzgurken“
-      const schluessel = (z.vorrat ? "v:" : "") + (z.zutat || z.name.toLocaleLowerCase("de").replace(/(?:en|n|e|s)$/, ""));
+      const getrennt = wahl.einkauf === 2 && !z.vorrat && z.zutat && verderblich(z.zutat, z.abteilung);   // frisch: je Einkauf
+      const schluessel = (z.vorrat ? "v:" : "") + (z.zutat || z.name.toLocaleLowerCase("de").replace(/(?:en|n|e|s)$/, "")) +
+        (getrennt ? "@" + einkauf : "");
       if (!posten.has(schluessel)) posten.set(schluessel, { name: z.zutat && !z.vorrat ? z.zutat : z.name, zutat: z.zutat,
         abteilung: z.vorrat ? "Vorrat" : (z.abteilung || "Sonstiges"), mengen: new Map(), ohne: false, optional: true,
         rezepte: new Set(), einkauf });
