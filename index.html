@@ -1126,6 +1126,68 @@ function bedarfVon(p) {
   return (mengen ? mengen + " " : "") + p.name + (p.optional ? " (nach Belieben)" : !mengen || p.mal ? " (nach Bedarf)" : "");
 }
 
+// Einheitliche Mengen (Entscheidung 18.11.): Bedarf in g, ml oder Stück; Stück ↔ g nur mit dem mittleren Stückgewicht
+// (BVL, Schätzung). Daraus: wie viele Packungen, was übrig bleibt, was es kostet. Unklar (Bund, EL, „nach Bedarf“ ohne
+// Menge, kein Packungsinhalt) → wie bisher eine Packung, ohne Rechnung.
+const r2 = (x) => Math.round(x * 100) / 100;
+// Flüssige Milchprodukte und passierte Tomaten: 1 ml ≈ 1 g (Dichte nahe 1) – nur als ca.-Angabe
+const ML_GLEICH_G = new Set(["Sahne", "Kochsahne", "Milch", "Buttermilch", "Joghurt", "Saure Sahne", "Schmand", "Crème fraîche",
+  "Dosentomaten", "Kokosmilch"]);
+const KLEINE_EINHEIT = new Set(["EL", "TL", "Prise", "Msp.", "Spritzer", "Schuss", "Tropfen"]);
+function packungen(liste, a) {
+  const eine = { anzahl: 1, preis: a.preis, ersparnis: a.ersparnis || 0 };
+  // Mit Mengen, die sich nicht umrechnen lassen: ehrlich sagen, dass eine Packung nur angenommen ist
+  const mitMenge = liste.some((p) => [...p.mengen.keys()].some((e) => !KLEINE_EINHEIT.has(e)));
+  const unsicher = { ...eine, unklar: mitMenge };
+  const inh = a.inhalt;
+  if (!inh) return unsicher;
+  let g = 0, ml = 0, stk = 0, unklar = false, plus = false;
+  for (const p of liste) {
+    if (p.ohne || p.mal) plus = true;                    // dazu „nach Bedarf“ (ohne Menge, Schnelle Idee)
+    for (const [e, x] of p.mengen) {
+      if (e === "g") g += x; else if (e === "ml") ml += x; else if (e === "" || e === "Stück") stk += x;
+      else if (KLEINE_EINHEIT.has(e)) plus = true;        // Löffel, Prise, Spritzer: passt in jede Packung
+      else unklar = true;
+    }
+  }
+  if (unklar) return unsicher;
+  if (!(g || ml || stk)) return eine;
+  let fluessigGeschaetzt = false;
+  if (ML_GLEICH_G.has(liste[0].zutat) && !stk && (inh[1] === "g" ? ml : g)) {
+    if (inh[1] === "g") { g += ml; ml = 0; } else if (inh[1] === "ml") { ml += g; g = 0; }
+    fluessigGeschaetzt = true;
+  }
+  const w = (angebotDaten.stueckgewichte || {})[liste[0].zutat] || null;
+  let menge, geschaetzt = false;
+  if (inh[1] === "g" && !ml) {
+    if (stk && !w) return unsicher;
+    menge = g + stk * (w || 0); geschaetzt = stk > 0;
+  } else if (inh[1] === "stk" && !ml) {
+    if (g && !w) return unsicher;
+    menge = Math.ceil(stk + (g ? g / w : 0) - 1e-9); geschaetzt = g > 0;
+  } else if (inh[1] === "ml" && !g && !stk) {
+    menge = ml;
+  } else return unsicher;
+  if (inh[2]) {                                            // lose Ware: Preis je kg
+    const anteil = menge / 1000;
+    return { anzahl: 1, lose: true, menge, einheit: "g", geschaetzt, plus, preis: Math.max(0.01, r2(a.preis * anteil)),
+             ersparnis: r2((a.ersparnis || 0) * anteil) };
+  }
+  geschaetzt = geschaetzt || fluessigGeschaetzt;
+  menge = rundeMenge(menge, inh[1]);                       // so, wie die Liste die Menge zeigt
+  const anzahl = Math.max(1, Math.ceil(menge / inh[0] - 1e-9));
+  return { anzahl, menge, einheit: inh[1], rest: anzahl * inh[0] - menge, geschaetzt, plus,
+           preis: r2(a.preis * anzahl), ersparnis: r2((a.ersparnis || 0) * anzahl) };
+}
+// Rundung wie mengeText (g/ml: ab 1000 auf 100, ab 100 auf 10, sonst auf 5; Stück ganz), damit Bedarf + Rest = Packung
+function rundeMenge(x, e) {
+  if (e === "stk") return Math.ceil(x - 1e-9);
+  if (x >= 1000) return Math.round(x / 100) * 100;
+  const schritt = x >= 100 ? 10 : 5;
+  return Math.max(schritt, Math.round(x / schritt) * schritt);
+}
+const mengeKurz = (x, e) => e === "stk" ? `${Math.round(x)} Stück` : mengeText(e, x);
+
 function hakenZeile(p, a, id, haken) {
   const bedarf = bedarfVon(p);
   const kasten = el("input", { type: "checkbox" });
@@ -1135,23 +1197,36 @@ function hakenZeile(p, a, id, haken) {
     speicherSchreiben("haken:" + planSchluessel, [...haken]);
   });
   const text = el("span", {});
+  const pk = a ? p.pk || packungen([p, ...(p.zusammen || [])], a) : null;
   if (a) {
-    const menge = a.menge && a.menge.trim() !== "je" ? " " + a.menge.replace(/(\d)\.(\d{2})(?!\d)/g, "$1,$2") : "";
-    text.append(el("span", { class: "h-was", text: a.name + menge }),
+    const mengeRoh = a.menge && a.menge.trim() !== "je" ? a.menge.replace(/(\d)\.(\d{2})(?!\d)/g, "$1,$2") : "";
+    const menge = mengeRoh && !a.name.toLocaleLowerCase("de").includes(mengeRoh.toLocaleLowerCase("de")) ? " " + mengeRoh : "";
+    const kaufen = pk.lose ? `${a.name} – ca. ${mengeKurz(pk.menge, "g")} lose` : `${pk.anzahl > 1 ? pk.anzahl + " × " : ""}${a.name}${menge}`;
+    text.append(el("span", { class: "h-was", text: kaufen }),
       el("span", { class: "warum", text: `${bedarf} · ${fuerText(p)}` }));
     for (const x of p.zusammen || []) text.append(el("span", { class: "warum", text: `${bedarfVon(x)} · ${fuerText(x)}` }));
+    if (pk.menge != null) {
+      const ca = pk.geschaetzt ? "ca. " : "";
+      const teile = [pk.lose ? `${ca}${mengeKurz(pk.menge, "g")} × ${euro(a.preis)}/kg` :
+        `du brauchst ${ca}${mengeKurz(pk.menge, pk.einheit)}${pk.plus ? " + nach Bedarf" : ""}` +
+        (pk.rest > 0.5 && !pk.plus ? `, übrig ${ca}${mengeKurz(pk.rest, pk.einheit)}` : "")];
+      if (pk.geschaetzt) teile.push(ML_GLEICH_G.has(p.zutat) ? "1 ml ≈ 1 g gerechnet" : "Stückgewicht geschätzt (BVL)");
+      text.append(el("span", { class: "warum", text: teile.join(" · ") }));
+    }
+    if (pk.unklar) text.append(el("span", { class: "warum", text: "1 Packung angenommen – Menge nicht umrechenbar, bitte selbst prüfen" }));
     if (a.normal) text.append(el("span", { class: "warum", text: `Normalpreis ${KETTE[a.kette].name} (online)` }));
     const g = p.geschlagen;
     if (g) text.append(el("span", { class: "warum spar", text: `günstiger als das Angebot bei ${KETTE[g.kette].name}: ${g.name} ${euro(g.preis)} ` +
       `(${basisText(a.basis)} statt ${basisText(g.basis)})` }));
-    if (a.ersparnis) text.append(el("span", { class: "warum spar", text: `${a.bezug} ${euro(a.vergleichspreis)}, du sparst ${euro(a.ersparnis)}` }));
+    if (a.ersparnis) text.append(el("span", { class: "warum spar", text: `${a.bezug} ${euro(a.vergleichspreis)}, du sparst ${euro(pk.ersparnis)}` +
+      (pk.anzahl > 1 ? ` (${pk.anzahl} Packungen)` : "") }));
     if (a.app_preis && a.app_preis < a.preis) text.append(el("span", { class: "warum", text: `mit App ${euro(a.app_preis)}` }));
   } else {
     text.append(el("span", { class: "h-was", text: bedarf }), el("span", { class: "warum", text: fuerText(p) }));
     if (p.weggelassen) text.append(el("span", { class: "warum", text: `Im Angebot bei ${KETTE[p.weggelassen.kette].name} (${euro(p.weggelassen.preis)}) – weggelassen, sonst ein Markt mehr` }));
     if (p.normalHinweis) text.append(el("span", { class: "warum", text: `Normalpreis ${KETTE[p.normalHinweis.kette].name}: ${p.normalHinweis.name} ${euro(p.normalHinweis.preis)} – nicht eingeplant, sonst ein Markt mehr` }));
   }
-  const preis = el("span", { class: "preis" + (a && a.normal ? " normal" : ""), text: a ? (a.ab ? "ab " : "") + euro(a.preis) : "" });
+  const preis = el("span", { class: "preis" + (a && a.normal ? " normal" : ""), text: a ? (a.ab ? "ab " : "") + (pk.lose ? "ca. " : "") + euro(pk.preis) : "" });
   return el("li", {}, el("label", {}, kasten, text, preis));
 }
 
@@ -1169,10 +1244,10 @@ function zettel(titel, rechts, eintraege, haken, mitSumme, ohneAbteilung = false
     ul.append(hakenZeile(p, a, id, haken));
   }
   if (mitSumme) {
-    const summe = Math.round(eintraege.reduce((s, [, a]) => s + (a ? a.preis : 0), 0) * 100) / 100;
+    const summe = r2(eintraege.reduce((s, [p, a]) => s + (a ? (p.pk ? p.pk.preis : a.preis) : 0), 0));
     const mitNormal = eintraege.some(([, a]) => a && a.normal);
     karte.append(el("div", { class: "summe" }, el("span", {}, document.createTextNode("Summe "),
-      el("small", { text: summeText || (mitNormal ? "(je Artikel eine Packung, mit Normalpreisen)" : "(je Angebot eine Packung)") })),
+      el("small", { text: summeText || (mitNormal ? "(benötigte Packungen, mit Normalpreisen)" : "(benötigte Packungen)") })),
       el("span", { class: "preis", text: euro(summe) })));
   }
   return karte;
@@ -1220,7 +1295,8 @@ function einkaufZeigen() {
   });
   const ziel = $("einkauf-liste");
   ziel.replaceChildren();
-  let gesamt = 0, imAngebot = 0, gespart = 0, summeAlle = 0, summeNormal = 0, ohnePreis = 0, summeVorrat = 0;
+  let gesamt = 0, imAngebot = 0, gespart = 0, summeAlle = 0, summeNormal = 0, ohnePreis = 0, summeVorrat = 0, geschaetzt = false;
+  for (const p of posten.values()) p.pk = null;                 // Packungen werden je Darstellung neu gerechnet
   const haken = new Set(speicherLesen("haken:" + planSchluessel) || []);
   const alleKetten = new Set(), tage = einkaufstage(wahl);
   for (const tag of tage) {
@@ -1263,15 +1339,17 @@ function einkaufZeigen() {
         if (gleich) (gleich[0].zusammen = gleich[0].zusammen || []).push(p); else hier.push([p, a]);
       }
       if (!hier.length) continue;
+      for (const [p, a] of hier) p.pk = packungen([p, ...(p.zusammen || [])], a);
       alleKetten.add(k);
       const nAngebot = hier.filter(([, a]) => !a.normal).length, nNormal = hier.length - nAngebot;
       ziel.append(zettel(KETTE[k].name + (tagName ? " · " + tagName : ""),
         [nAngebot ? `${nAngebot} ${nAngebot === 1 ? "Angebot" : "Angebote"}` : "", nNormal ? `${nNormal} Normalpreis${nNormal === 1 ? "" : "e"}` : ""].filter(Boolean).join(" + "),
         hier.map(([p, a]) => [p, a, hid(p)]), haken, true));
       imAngebot += nAngebot;
-      gespart += hier.reduce((s, [, a]) => s + (a.ersparnis || 0), 0);
-      summeAlle += hier.filter(([, a]) => !a.normal).reduce((s, [, a]) => s + a.preis, 0);
-      summeNormal += hier.filter(([, a]) => a.normal).reduce((s, [, a]) => s + a.preis, 0);
+      gespart += hier.reduce((s, [p]) => s + p.pk.ersparnis, 0);
+      summeAlle += hier.filter(([, a]) => !a.normal).reduce((s, [p]) => s + p.pk.preis, 0);
+      summeNormal += hier.filter(([, a]) => a.normal).reduce((s, [p]) => s + p.pk.preis, 0);
+      geschaetzt = geschaetzt || hier.some(([p]) => p.pk.geschaetzt);
     }
     const ohne = liste.filter((p) => !gewaehlt.has(p)).sort(nachLaufweg);
     ohnePreis += ohne.filter((p) => !p.normalHinweis).length;
@@ -1289,11 +1367,11 @@ function einkaufZeigen() {
   const teile = [`${gesamt} Posten für ${wahl.personen} ${wahl.personen === 1 ? "Person" : "Personen"}`,
     `${imAngebot} davon im Angebot` + (alleKetten.size ? ` bei ${[...alleKetten].map((k) => KETTE[k].name).join(", ")}` : "")];
   // Ersparnis rechnet nur gegen Vergleichspreise aus dem Prospekt (statt/UVP), je Angebot eine Packung
-  const r2 = (x) => Math.round(x * 100) / 100;
   if (summeAlle + summeNormal > 0) teile.push(`Einkauf zusammen ${euro(r2(summeAlle + summeNormal))} (Angebote ${euro(r2(summeAlle))}` +
     (summeNormal ? ` + Normalpreise ${euro(r2(summeNormal))}` : "") + ")" + (ohnePreis ? ` · ${ohnePreis} Posten noch ohne Preis` : "") +
     (summeVorrat ? ` · Vorrat, falls alles fehlt: ${euro(r2(summeVorrat))}` : ""));
-  if (gespart > 0) teile.push(`Ersparnis laut Prospekt mindestens ${euro(Math.round(gespart * 100) / 100)} (je Angebot eine Packung gerechnet)`);
+  if (gespart > 0) teile.push(`Ersparnis laut Prospekt mindestens ${euro(r2(gespart))} (für die benötigten Packungen)`);
+  if (geschaetzt) teile.push(angebotDaten.stueckgewichte_quelle || "Stückgewichte geschätzt");
   teile.push("Haken bleiben nur auf diesem Gerät gespeichert");
   $("einkauf-meta").textContent = teile.join(" · ");
 }
