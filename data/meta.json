@@ -1,28 +1,28 @@
 {
- "erstellt": "2026-11-15",
+ "erstellt": "2026-11-22",
  "quelle": "OpenStreetMap (Geofabrik-Auszug Deutschland)",
  "lizenz": "© OpenStreetMap-Mitwirkende, ODbL",
- "maerkte": 25629,
+ "maerkte": 25666,
  "postleitzahlen": 8172,
  "kacheln": 70,
  "je_kette": {
   "aldi": 5,
   "aldi-nord": 2211,
   "aldi-sued": 2007,
-  "edeka": 5250,
+  "edeka": 5269,
   "kaufland": 785,
-  "lidl": 3256,
+  "lidl": 3259,
   "marktkauf": 108,
-  "nahkauf": 481,
-  "netto": 4330,
-  "norma": 1348,
+  "nahkauf": 482,
+  "netto": 4341,
+  "norma": 1350,
   "penny": 2129,
-  "rewe": 3719
+  "rewe": 3720
  },
  "haendlerseiten": {
   "edeka": {
-   "domains": 471,
-   "maerkte": 789
+   "domains": 475,
+   "maerkte": 796
   },
   "marktkauf": {
    "domains": 21,
@@ -30,21 +30,21 @@
   },
   "nahkauf": {
    "domains": 21,
-   "maerkte": 44
+   "maerkte": 46
   },
   "rewe": {
    "domains": 81,
-   "maerkte": 141
+   "maerkte": 142
   }
  },
  "angebotsregionen": {
-  "edeka-hessenring": 329,
-  "edeka-minden-hannover": 1178,
+  "edeka-hessenring": 330,
+  "edeka-minden-hannover": 1179,
   "edeka-nord": 536,
-  "edeka-nst": 499,
+  "edeka-nst": 500,
   "edeka-rhein-ruhr": 583,
-  "edeka-suedbayern": 850,
-  "edeka-suedwest": 948,
-  "offen": 327
+  "edeka-suedbayern": 851,
+  "edeka-suedwest": 961,
+  "offen": 329
  }
 }
